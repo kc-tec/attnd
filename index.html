@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Attendance Scanner</title>
+    <!-- 1. Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. QR Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.0.9/dist/html5-qrcode.min.js"></script>
+    <style>
+        /* Updated styles for the QR reader video feed */
+        #qr-reader {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            overflow: hidden; /* To keep video feed inside borders */
+        }
+        /* Hide the default "Scan an image file" text from the library */
+        #qr-reader a {
+            display: none !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen flex items-center justify-center p-4">
+
+    <!-- Card container: Changed padding from p-6 md:p-8 to p-4 sm:p-6 md:p-8 -->
+    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">Class Attendance Scanner</h1>
+
+        <!-- Welcome message (shown after registration) -->
+        <div id="welcome-message" class="hidden text-center text-gray-600 mb-4"></div>
+
+        <!-- Loading Spinner (shown on load) -->
+        <div id="loading-container" class="text-center py-8">
+            <svg class="animate-spin h-8 w-8 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-3 font-medium text-gray-600">Connecting to service...</p>
+        </div>
+
+        <!-- New Permissions Container (hidden by default) -->
+        <div id="permissions-container" class="hidden">
+            <h2 class="text-lg font-semibold text-center text-gray-700 mb-3">Permissions Required</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                This app needs access to your <strong>Location</strong> (to verify you are in class) and your <strong>Camera</strong> (to scan the QR code).
+            </p>
+            <button id="grant-permissions-btn" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+                Grant Permissions
+            </button>
+            <div id="permissions-message" class="text-sm text-center mt-3 text-red-600"></div>
+        </div>
+
+        <!-- Registration Container (hidden by default) -->
+        <div id="registration-container" class="hidden">
+            <h2 class="text-lg font-semibold text-center text-gray-700 mb-3">Register Your Profile</h2>
+            <p class="text-sm text-gray-600 mb-4">Please register your student profile. This is a one-time step. Your User ID is:</p>
+            <code id="user-uid-display" class="block w-full text-center bg-gray-100 text-gray-800 p-3 rounded-lg text-xs break-all mb-4"></code>
+            
+            <!-- New Registration Form -->
+            <div class="space-y-4">
+                <div>
+                    <label for="student-id" class="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
+                    <input type="text" id="student-id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., KCP00123">
+                </div>
+
+                <div>
+                    <label for="student-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input type="text" id="student-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., John Doe">
+                </div>
+
+                <div>
+                    <label for="student-sex" class="block text-sm font-medium text-gray-700 mb-1">Sex</label>
+                    <select id="student-sex" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">Please select...</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <!-- "Other" option was removed as requested -->
+                    </select>
+                </div>
+
+                <div>
+                    <label for="student-tel" class="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
+                    <input type="tel" id="student-tel" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 012 345 678">
+                </div>
+
+                <div>
+                    <label for="student-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="student-email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., student.email@example.com">
+                </div>
+
+                <div>
+                    <label for="student-program" class="block text-sm font-medium text-gray-700 mb-1">Program</label>
+                    <input type="text" id="student-program" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Bachelor of IT">
+                </div>
+
+                <div>
+                    <label for="student-academic-year" class="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                    <input type="text" id="student-academic-year" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Year 4">
+                </div>
+
+                <div>
+                    <label for="student-class" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                    <input type="text" id="student-class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., M1">
+                </div>
+            </div>
+            
+            <button id="register-btn" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+                Register
+            </button>
+            <div id="register-message" class="text-sm text-center mt-3"></div>
+        </div>
+
+        <!-- Scanner Container (hidden by default) -->
+        <div id="scanner-container" class="hidden">
+            <!-- QR Code Scanner video feed will be rendered here -->
+            <div id="qr-reader" class="rounded-lg overflow-hidden hidden"></div>
+
+            <!-- Status & Result Area -->
+            <div id="result-container" class="mt-6 text-center">
+                
+                <!-- New buttons container -->
+                <div id="scan-controls" class="mt-4 space-y-3">
+                    <button id="start-scan-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+                        Start Camera Scan
+                    </button>
+                    
+                    <!-- Removed Upload Image Button and related elements -->
+                    
+                    <button id="stop-scan-btn" class="hidden w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+                        Stop Camera
+                    </button>
+                </div>
+
+                <!-- Final Result: Success or Error -->
+                <div id="final-message" class="hidden mt-4"></div>
+
+                <!-- The "Hidden" Link Area -->
+                <div id="attendance-link-container" class="hidden mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <h4 class="font-semibold text-green-800">Access Granted!</h4>
+                    <p class="text-sm text-gray-700 mb-3">You are in range. Here is the attendance link:</p>
+                    <!-- 
+                      THIS IS THE INSECURE LINK. 
+                      See README.md for why this is bad and how to fix it.
+                    -->
+                    <a id="attendance-link" href="https://forms.gle/your-attendance-form" target="_blank" class="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                        Go to Attendance Form
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 3. Firebase SDK and App Logic -->
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBoQStCXGXMe5Bz5hk14cOmynRI3gPGs6o",
+            authDomain: "kcpttc.firebaseapp.com",
+            projectId: "kcpttc",
+            storageBucket: "kcpttc.firebasestorage.app",
+            messagingSenderId: "709003234625",
+            appId: "1:709003234625:web:c9284048369530895065c0",
+            measurementId: "G-P1NN0RSNFW"
+        };
+        
+        const finalFirebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : firebaseConfig;
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-attendance-app';
+
+        // --- Initialize Firebase ---
+        let app, auth, db, currentUserId, currentUserName;
+        try {
+            app = initializeApp(finalFirebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase initialization error:", e);
+            document.getElementById("loading-container").innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Could not connect to Firebase. Check console.</div>`;
+        }
+
+        // --- UI Elements ---
+        const loadingContainer = document.getElementById("loading-container");
+        const permissionsContainer = document.getElementById("permissions-container"); // New
+        const grantPermissionsBtn = document.getElementById("grant-permissions-btn"); // New
+        const permissionsMessage = document.getElementById("permissions-message"); // New
+        const registrationContainer = document.getElementById("registration-container");
+        const scannerContainer = document.getElementById("scanner-container");
+        const welcomeMessage = document.getElementById("welcome-message");
+        const userUidDisplay = document.getElementById("user-uid-display");
+        
+        // Registration form fields
+        const studentIdInput = document.getElementById("student-id");
+        const studentNameInput = document.getElementById("student-name");
+        const studentSexInput = document.getElementById("student-sex");
+        const studentTelInput = document.getElementById("student-tel");
+        const studentEmailInput = document.getElementById("student-email");
+        const studentProgramInput = document.getElementById("student-program");
+        const studentAcademicYearInput = document.getElementById("student-academic-year");
+        const studentClassInput = document.getElementById("student-class");
+        
+        const registerBtn = document.getElementById("register-btn");
+        const registerMessage = document.getElementById("register-message");
+
+        const finalMessageDiv = document.getElementById("final-message");
+        const linkContainer = document.getElementById("attendance-link-container");
+
+        // --- Firebase Authentication ---
+        onAuthStateChanged(auth, async (user) => {
+            let authUser = user;
+            if (!authUser) {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
+                        authUser = userCredential.user;
+                        console.log("User signed in with custom token:", authUser.uid);
+                    } else {
+                        const userCredential = await signInAnonymously(auth);
+                        authUser = userCredential.user;
+                        console.log("New user signed in anonymously:", authUser.uid);
+                    }
+                } catch (error) {
+                    console.error("Authentication error:", error);
+                    loadingContainer.innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Authentication failed. Please refresh.</div>`;
+                    return;
+                }
+            }
+
+            currentUserId = authUser.uid;
+            console.log("User authenticated:", currentUserId);
+
+            // --- New Flow: Show permissions screen ---
+            loadingContainer.classList.add("hidden");
+            permissionsContainer.classList.remove("hidden");
+        });
+
+        // --- New Permissions Logic ---
+        grantPermissionsBtn.addEventListener("click", async () => {
+            grantPermissionsBtn.disabled = true;
+            grantPermissionsBtn.textContent = "Requesting Location...";
+            permissionsMessage.textContent = "";
+
+            try {
+                // 1. Request Location
+                await requestLocationPermission();
+                console.log("Location permission granted.");
+                
+                grantPermissionsBtn.textContent = "Requesting Camera...";
+                
+                // 2. Request Camera
+                await requestCameraPermission();
+                console.log("Camera permission granted.");
+
+                // 3. Both granted, proceed to app
+                permissionsContainer.classList.add("hidden");
+                await proceedToRegistrationCheck();
+
+            } catch (error) {
+                // Handle denial or error
+                console.error("Permission error:", error.message);
+                permissionsMessage.textContent = error.message;
+                grantPermissionsBtn.disabled = false;
+                grantPermissionsBtn.textContent = "Grant Permissions";
+            }
+        });
+
+        /**
+         * Wraps Geolocation request in a Promise.
+         */
+        function requestLocationPermission() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("Geolocation is not supported by your browser."));
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Success
+                        resolve(position);
+                    },
+                    (error) => {
+                        // Error
+                        let msg = "Could not get location. ";
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                msg = "Location access denied. Please enable it in your browser settings to continue.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                msg = "Location information is unavailable. Please try again.";
+                                break;
+                            case error.TIMEOUT:
+                                msg = "The request to get location timed out. Please try again.";
+                                break;
+                            default:
+                                msg = "An unknown location error occurred. Please try again.";
+                                break;
+                        }
+                        reject(new Error(msg));
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000, // 10 second timeout for the request
+                        maximumAge: 0 
+                    }
+                );
+            });
+        }
+
+        /**
+         * Wraps Camera request in a Promise.
+         */
+        async function requestCameraPermission() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("Camera access (getUserMedia) is not supported by your browser.");
+            }
+            
+            try {
+                // Request video stream
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Stop all tracks immediately, we only needed the permission.
+                stream.getTracks().forEach(track => track.stop());
+                return; // Success
+            } catch (err) {
+                console.error("getUserMedia error:", err);
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    throw new Error("Camera access denied. Please enable it in your browser settings to continue.");
+                }
+                throw new Error("Could not access camera. Please try again.");
+            }
+        }
+
+
+        /**
+         * Checks Firestore for user registration. (Moved from onAuthStateChanged)
+         */
+        async function proceedToRegistrationCheck() {
+            const userDocPath = `artifacts/${appId}/public/data/users/${currentUserId}`;
+            const userDocRef = doc(db, userDocPath);
+            
+            try {
+                const userDoc = await getDoc(userDocRef);
+                loadingContainer.classList.add("hidden"); // Ensure it's hidden
+
+                if (userDoc.exists() && userDoc.data().name) {
+                    // User is registered
+                    currentUserName = userDoc.data().name;
+                    welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
+                    welcomeMessage.classList.remove("hidden");
+                    scannerContainer.classList.remove("hidden");
+                    initializeScanner(); // Start the scanner
+                } else {
+                    // User is not registered
+                    userUidDisplay.textContent = currentUserId;
+                    registrationContainer.classList.remove("hidden");
+                }
+            } catch (error) {
+                console.error("Error checking user registration:", error);
+                // Show error in a more central way if permissions are granted but firestore fails
+                permissionsContainer.classList.remove("hidden");
+                permissionsMessage.textContent = "Error: Could not check user status. Please refresh.";
+            }
+        }
+
+        // --- Registration Logic ---
+        registerBtn.addEventListener("click", async () => {
+            // Get values from all form fields
+            const studentId = studentIdInput.value.trim();
+            const name = studentNameInput.value.trim();
+            const sex = studentSexInput.value;
+            const telephone = studentTelInput.value.trim();
+            const email = studentEmailInput.value.trim().toLowerCase();
+            const program = studentProgramInput.value.trim();
+            const academicYear = studentAcademicYearInput.value.trim();
+            const studentClass = studentClassInput.value.trim();
+
+            // Basic Validation
+            if (!studentId || !name || !sex || !telephone || !email || !program || !academicYear || !studentClass) {
+                registerMessage.textContent = "Please fill out all fields.";
+                registerMessage.className = "text-sm text-center mt-3 text-red-600";
+                return;
+            }
+
+            registerBtn.disabled = true;
+            registerBtn.textContent = "Registering...";
+            registerMessage.textContent = "";
+
+            try {
+                // Save all fields to Firestore
+                const userDocPath = `artifacts/${appId}/public/data/users/${currentUserId}`;
+                await setDoc(doc(db, userDocPath), {
+                    userId: currentUserId,
+                    studentId: studentId,
+                    name: name,
+                    sex: sex,
+                    telephone: telephone,
+                    email: email,
+                    program: program,
+                    academicYear: academicYear,
+                    class: studentClass,
+                    registeredAt: serverTimestamp()
+                });
+
+                // Registration successful!
+                currentUserName = name; // Set the name for the welcome message
+                registrationContainer.classList.add("hidden");
+                welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
+                welcomeMessage.classList.remove("hidden");
+                scannerContainer.classList.remove("hidden");
+                initializeScanner(); // Start the scanner
+
+            } catch (error) {
+                console.error("Error saving registration:", error);
+                registerMessage.textContent = "Error: Could not save registration. Please try again.";
+                registerMessage.className = "text-sm text-center mt-3 text-red-600";
+                registerBtn.disabled = false;
+                registerBtn.textContent = "Register";
+            }
+        });
+
+
+        // --- App State ---
+        let classData = null; // Will hold { name, lat, lon, radius }
+        let html5QrCode; // Using the core class, not the scanner UI
+
+        // --- 1. QR Code Scanning Logic ---
+        function initializeScanner() {
+            if (html5QrCode) {
+                console.log("Scanner already initialized.");
+                return;
+            }
+
+            // New UI elements
+            const startScanBtn = document.getElementById("start-scan-btn");
+            const stopScanBtn = document.getElementById("stop-scan-btn");
+            const qrReaderDiv = document.getElementById("qr-reader");
+
+            try {
+                html5QrCode = new Html5Qrcode("qr-reader");
+            } catch (err) {
+                console.error("Failed to initialize Html5Qrcode:", err);
+                showMessage("error", "Could not initialize QR scanner.");
+                return;
+            }
+
+            // --- "Start Scan" Button Click ---
+            startScanBtn.addEventListener("click", () => {
+                qrReaderDiv.classList.remove("hidden");
+                startScanBtn.classList.add("hidden");
+                stopScanBtn.classList.remove("hidden");
+                finalMessageDiv.classList.add("hidden"); 
+
+                const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+                Html5Qrcode.getCameras().then(cameras => {
+                    let cameraId;
+                    if (cameras && cameras.length) {
+                        const backCamera = cameras.find(camera => 
+                            (camera.label && camera.label.toLowerCase().includes('back')) || 
+                            (camera.label && camera.label.toLowerCase().includes('environment'))
+                        );
+                        
+                        if (backCamera) {
+                            cameraId = backCamera.id;
+                            console.log("Using back camera:", backCamera.label);
+                        } else {
+                            cameraId = cameras[0].id;
+                            console.log("No back camera found, using default:", cameras[0].label);
+                        }
+                    } else {
+                        console.warn("No cameras enumerated. Using default facingMode.");
+                        cameraId = { facingMode: "environment" };
+                    }
+
+                    html5QrCode.start(
+                        cameraId,
+                        config,
+                        onScanSuccess, 
+                        onScanError    
+                    ).catch((err) => {
+                        console.error("Camera start error (attempt 1):", err);
+                        html5QrCode.start(
+                            { facingMode: "environment" }, config, onScanSuccess, onScanError
+                        ).catch((fallbackErr) => {
+                            console.error("Fallback camera start error (attempt 2):", fallbackErr);
+                            showMessage("error", "Failed to start camera. Please grant permissions.");
+                            stopScanning(); 
+                        });
+                    });
+
+                }).catch(err => {
+                    console.error("Camera access error (getCameras):", err);
+                    html5QrCode.start(
+                        { facingMode: "environment" }, 
+                        config,
+                        onScanSuccess, 
+                        onScanError    
+                    ).catch((startErr) => {
+                        console.error("Fallback camera start error (attempt 3):", startErr);
+                        showMessage("error", "Failed to start camera. Please grant permissions.");
+                        stopScanning(); 
+                    });
+                });
+            });
+
+            // --- "Stop Scan" Button Click ---
+            stopScanBtn.addEventListener("click", () => {
+                stopScanning();
+            });
+        }
+
+        /**
+         * Stops the camera scan and resets the UI buttons.
+         */
+        function stopScanning() {
+            try {
+                if (html5QrCode && html5QrCode.isScanning) {
+                    html5QrCode.stop().then(() => {
+                        console.log("Camera stopped.");
+                    }).catch(err => {
+                        console.warn("Camera stop failed, already stopped?", err);
+                    });
+                }
+            } catch (err) {
+                console.warn("Error stopping scanner:", err);
+            }
+            
+            // Reset UI
+            document.getElementById("qr-reader").classList.add("hidden");
+            document.getElementById("start-scan-btn").classList.remove("hidden");
+            document.getElementById("stop-scan-btn").classList.add("hidden");
+        }
+
+
+        function onScanSuccess(decodedText, decodedResult) {
+            stopScanning();
+            console.log(`Scan result: ${decodedText}`);
+
+            try {
+                // Parse the data: "Class A|12.7299|104.8908|50"
+                const parts = decodedText.split('|');
+                if (parts.length !== 4) throw new Error("Invalid QR code format.");
+
+                classData = {
+                    name: parts[0],
+                    lat: parseFloat(parts[1]),
+                    lon: parseFloat(parts[2]),
+                    radius: parseFloat(parts[3]) // Radius in meters
+                };
+
+                if (isNaN(classData.lat) || isNaN(classData.lon) || isNaN(classData.radius)) {
+                    throw new Error("Invalid location data in QR code.");
+                }
+
+                finalMessageDiv.classList.add("hidden");
+                checkLocationAndMarkAttendance();
+
+            } catch (error) {
+                console.error("QR Parse Error:", error);
+                finalMessageDiv.innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg"><strong>Scan Failed:</strong> ${error.message}. Please scan a valid class QR code.</div>`;
+                finalMessageDiv.classList.remove("hidden");
+            }
+        }
+
+        function onScanError(errorMessage) {
+            // This callback is mostly for live scanning, not file uploads.
+            // We can safely ignore it to avoid spamming the console.
+        }
+
+        // --- 2. Location Check Logic ---
+        function checkLocationAndMarkAttendance() {
+            if (!classData) return;
+            // We don't need to check for navigator.geolocation, as it was checked at the start.
+            
+            showMessage("info", "QR Code Scanned. Getting your location...");
+
+            // We can just call getCurrentPosition, permission is already granted.
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // Location Success
+                    const userLat = position.coords.latitude;
+                    const userLon = position.coords.longitude;
+                    const userAccuracy = position.coords.accuracy;
+
+                    console.log(`User Location: ${userLat}, ${userLon} (Accuracy: ${userAccuracy}m)`);
+                    
+                    const distance = haversineDistance(
+                        classData.lat, classData.lon,
+                        userLat, userLon
+                    );
+
+                    console.log(`Distance to class: ${distance.toFixed(2)} meters`);
+                    
+                    if (distance <= classData.radius) {
+                        // USER IS IN RANGE
+                        showMessage("success", `Success! You are ${distance.toFixed(0)}m from class (within the ${classData.radius}m range).`);
+                        linkContainer.classList.remove("hidden");
+                        logAttendanceAttempt(true, distance, userLat, userLon);
+                    } else {
+                        // USER IS OUT OF RANGE
+                        showMessage("error", `Access Denied. You are ${distance.toFixed(0)}m from class. You must be within ${classData.radius}m.`);
+                        linkContainer.classList.add("hidden");
+                        logAttendanceAttempt(false, distance, userLat, userLon);
+                    }
+                },
+                (error) => {
+                    // Location Error - this shouldn't happen if permission was granted,
+                    // but could happen if location services are turned off mid-use.
+                    let msg = "Could not get your location. ";
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            msg = "Location access was denied. Please re-enable it in your browser settings.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            msg = "Location information is unavailable. Please check your device's GPS.";
+                            break;
+                        case error.TIMEOUT:
+                            msg = "The request to get location timed out. Please try again.";
+                            break;
+                        default:
+                            msg = "An unknown error occurred.";
+                            break;
+                    }
+                    showMessage("error", msg);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000, 
+                    maximumAge: 0 
+                }
+            );
+        }
+
+        // --- 3. Firebase Logging ---
+        async function logAttendanceAttempt(isSuccess, distance, userLat, userLon) {
+            if (!currentUserId || !classData) {
+                console.warn("Missing user ID or class data. Skipping log.");
+                return;
+            }
+
+            try {
+                // We create a unique ID for this *specific attempt*
+                const attemptId = `attempt_${Date.now()}`;
+                const logPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts/${attemptId}`;
+                const logRef = doc(db, logPath);
+                
+                await setDoc(logRef, {
+                    userId: currentUserId,
+                    userName: currentUserName || "Not Registered", // Use the name from registration
+                    class: classData.name,
+                    timestamp: serverTimestamp(),
+                    isSuccess: isSuccess,
+                    reportedDistance: distance,
+                    reportedLat: userLat,
+                    reportedLon: userLon,
+                    userAgent: navigator.userAgent
+                });
+
+                console.log("Attendance attempt logged to Firestore.");
+
+            } catch (error) {
+                console.error("Firestore logging error:", error);
+            }
+        }
+
+        // --- Helper Functions ---
+
+        /**
+         * Calculates the distance between two points in meters using the Haversine formula.
+         */
+        function haversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Earth's radius in meters
+            const phi1 = lat1 * Math.PI / 180;
+            const phi2 = lat2 * Math.PI / 180;
+            const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+            const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                      Math.cos(phi1) * Math.cos(phi2) *
+                      Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            
+            return R * c; // Distance in meters
+        }
+
+        /**
+         * Displays a message to the user.
+         * @param {'success' | 'error' | 'info'} type
+         * @param {string} message
+         */
+        function showMessage(type, message) {
+            let bgColor = "bg-gray-100";
+            let textColor = "text-gray-800";
+
+            if (type === "success") {
+                bgColor = "bg-green-100";
+                textColor = "text-green-800";
+            } else if (type === "error") {
+                bgColor = "bg-red-100";
+                textColor = "text-red-800";
+            } else if (type === "info") {
+                bgColor = "bg-blue-100";
+                textColor = "text-blue-800";
+            }
+
+            finalMessageDiv.innerHTML = `<div class="${textColor} ${bgColor} font-medium p-3 rounded-lg">${message}</div>`;
+            finalMessageDiv.classList.remove("hidden");
+        }
+
+    </script>
+</body>
+</html>
+
