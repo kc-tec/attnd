@@ -78,7 +78,6 @@
                         <option value="">Please select...</option>
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
-                        <!-- "Other" option was removed as requested -->
                     </select>
                 </div>
 
@@ -127,9 +126,7 @@
                     <button id="start-scan-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
                         Start Camera Scan
                     </button>
-                    
-                    <!-- Removed Upload Image Button and related elements -->
-                    
+                                        
                     <button id="stop-scan-btn" class="hidden w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
                         Stop Camera
                     </button>
@@ -138,18 +135,16 @@
                 <!-- Final Result: Success or Error -->
                 <div id="final-message" class="hidden mt-4"></div>
 
-                <!-- The "Hidden" Link Area -->
+                <!-- *** LINK REMOVED *** -->
+                <!-- This container now only shows a success message, not a link. -->
                 <div id="attendance-link-container" class="hidden mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                     <h4 class="font-semibold text-green-800">Access Granted!</h4>
-                    <p class="text-sm text-gray-700 mb-3">You are in range. Here is the attendance link:</p>
-                    <!-- 
-                      THIS IS THE INSECURE LINK. 
-                      See README.md for why this is bad and how to fix it.
-                    -->
-                    <a id="attendance-link" href="https://forms.gle/your-attendance-form" target="_blank" class="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
-                        Go to Attendance Form
-                    </a>
+                    <p class="text-sm text-gray-700">
+                        Your successful check-in has been logged.
+                    </p>
                 </div>
+                <!-- *** END OF CHANGE *** -->
+
             </div>
         </div>
 
@@ -459,6 +454,7 @@
                 startScanBtn.classList.add("hidden");
                 stopScanBtn.classList.remove("hidden");
                 finalMessageDiv.classList.add("hidden"); 
+                linkContainer.classList.add("hidden"); // Hide previous success message
 
                 const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
@@ -604,12 +600,14 @@
                     if (distance <= classData.radius) {
                         // USER IS IN RANGE
                         showMessage("success", `Success! You are ${distance.toFixed(0)}m from class (within the ${classData.radius}m range).`);
-                        linkContainer.classList.remove("hidden");
+                        linkContainer.classList.remove("hidden"); // Show the new success message
                         logAttendanceAttempt(true, distance, userLat, userLon);
                     } else {
                         // USER IS OUT OF RANGE
                         showMessage("error", `Access Denied. You are ${distance.toFixed(0)}m from class. You must be within ${classData.radius}m.`);
                         linkContainer.classList.add("hidden");
+                        // *** FIX IS HERE ***
+                        // Removed the bad line of text that caused the error
                         logAttendanceAttempt(false, distance, userLat, userLon);
                     }
                 },
