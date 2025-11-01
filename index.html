@@ -155,7 +155,8 @@
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // *** NEW IMPORTS ADDED ***
+        import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -559,7 +560,10 @@
                 }
 
                 finalMessageDiv.classList.add("hidden");
-                checkLocationAndMarkAttendance();
+                
+                // *** MODIFIED CALL ***
+                // Instead of going straight to location check, call the new time check function
+                checkLastScanTimeAndProceed();
 
             } catch (error) {
                 console.error("QR Parse Error:", error);
@@ -573,12 +577,75 @@
             // We can safely ignore it to avoid spamming the console.
         }
 
-        // --- 2. Location Check Logic ---
+        // --- 2. New Time Check Logic ---
+
+        /**
+         * New function: Checks Firestore for the last successful scan before checking location.
+         */
+        async function checkLastScanTimeAndProceed() {
+            if (!classData || !currentUserId) {
+                console.error("Missing class data or user ID for scan check.");
+                return;
+            }
+
+            showMessage("info", "Scan successful. Checking your last attendance time...");
+
+            try {
+                const attemptsPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts`;
+                const attemptsRef = collection(db, attemptsPath);
+                
+                // Query for all *successful* attempts for this user and class
+                // We must sort in memory as per instructions (no orderBy in query)
+                const q = query(attemptsRef, where("isSuccess", "==", true));
+                const querySnapshot = await getDocs(q);
+
+                let lastSuccessfulScanTime = null;
+
+                if (!querySnapshot.empty) {
+                    // Sort the results in memory to find the most recent
+                    const successfulAttempts = querySnapshot.docs
+                        .map(d => d.data())
+                        .filter(d => d.timestamp); // Ensure timestamp exists
+
+                    if (successfulAttempts.length > 0) {
+                        successfulAttempts.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+                        lastSuccessfulScanTime = successfulAttempts[0].timestamp;
+                    }
+                }
+
+                if (lastSuccessfulScanTime) {
+                    const now = Timestamp.now();
+                    const oneHourInMilliseconds = 60 * 60 * 1000;
+                    const timeDifference = now.toMillis() - lastSuccessfulScanTime.toMillis();
+
+                    if (timeDifference < oneHourInMilliseconds) {
+                        // User scanned too recently
+                        const minutesRemaining = Math.ceil((oneHourInMilliseconds - timeDifference) / 60000);
+                        showMessage("error", `You have already checked in for this class. Please try again in ${minutesRemaining} minutes.`);
+                        return; // Stop the process
+                    }
+                }
+
+                // If we get here, it means:
+                // 1. They've never scanned before.
+                // 2. Their last scan was more than 1 hour ago.
+                // So, we proceed to the location check.
+                console.log("Time check passed. Proceeding to location check.");
+                checkLocationAndMarkAttendance();
+
+            } catch (error) {
+                console.error("Error checking last scan time:", error);
+                showMessage("error", "Could not verify your last attendance. Please try again.");
+            }
+        }
+
+
+        // --- 3. Location Check Logic ---
         function checkLocationAndMarkAttendance() {
             if (!classData) return;
             // We don't need to check for navigator.geolocation, as it was checked at the start.
             
-            showMessage("info", "QR Code Scanned. Getting your location...");
+            showMessage("info", "Checking your location...");
 
             // We can just call getCurrentPosition, permission is already granted.
             navigator.geolocation.getCurrentPosition(
@@ -606,15 +673,13 @@
                         // USER IS OUT OF RANGE
                         showMessage("error", `Access Denied. You are ${distance.toFixed(0)}m from class. You must be within ${classData.radius}m.`);
                         linkContainer.classList.add("hidden");
-                        // *** FIX IS HERE ***
-                        // Removed the bad line of text that caused the error
                         logAttendanceAttempt(false, distance, userLat, userLon);
                     }
                 },
                 (error) => {
                     // Location Error - this shouldn't happen if permission was granted,
                     // but could happen if location services are turned off mid-use.
-                    let msg = "Could not get your location. ";
+                    let msg = "Could not get location. ";
                     switch(error.code) {
                         case error.PERMISSION_DENIED:
                             msg = "Location access was denied. Please re-enable it in your browser settings.";
@@ -639,7 +704,7 @@
             );
         }
 
-        // --- 3. Firebase Logging ---
+        // --- 4. Firebase Logging ---
         async function logAttendanceAttempt(isSuccess, distance, userLat, userLon) {
             if (!currentUserId || !classData) {
                 console.warn("Missing user ID or class data. Skipping log.");
