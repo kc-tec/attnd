@@ -6,15 +6,20 @@
     <title>Attendance Report</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- NEW: jsPDF for PDF export -->
+    <!-- jsPDF for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-    <!-- NEW: SheetJS for Excel export -->
+    <!-- SheetJS for Excel export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         /* Style for table */
-        table thead th { position: sticky; top: 0; background-color: #f3f4f6; }
+        table thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f3f4f6; /* gray-100 */
+            z-index: 10;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-4 sm:p-8">
@@ -35,24 +40,23 @@
         <div id="report-container" class="hidden">
             <!-- Filters -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <input type="text" id="filter-name" placeholder="Filter by Name..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <input type="text" id="filter-class" placeholder="Filter by Class..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <input type="text" id="filter-student-id" placeholder="Filter by Student ID..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <input type="text" id="filter-course" placeholder="Filter by Course..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
 
             <!-- Action Buttons -->
-            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 mb-6">
-                <button id="fetch-reports-btn" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300">
-                    Fetch All Reports
+            <div class="flex flex-wrap gap-3 mb-6">
+                <button id="fetch-reports-btn" class="flex-grow sm:flex-grow-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300">
+                    Fetch Reports
                 </button>
-                <button id="download-csv-btn" class="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
+                <button id="download-csv-btn" class="flex-grow sm:flex-grow-0 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
                     Download as CSV
                 </button>
-                <!-- NEW BUTTONS -->
-                <button id="download-excel-btn" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
+                <button id="download-excel-btn" class="flex-grow sm:flex-grow-0 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
                     Download as Excel
                 </button>
-                <button id="download-pdf-btn" class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
+                <button id="download-pdf-btn" class="flex-grow sm:flex-grow-0 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
                     Download as PDF
                 </button>
             </div>
@@ -62,16 +66,14 @@
             <!-- Report Table -->
             <div class="max-h-[600px] overflow-y-auto border border-gray-200 rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200">
+                    <!-- *** TABLE HEAD MODIFIED *** -->
                     <thead class="bg-gray-100">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Date</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Timestamp</th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Student Name</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Student ID</th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Class</th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Course</th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Teacher</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Distance (m)</th>
                         </tr>
                     </thead>
                     <tbody id="report-table-body" class="bg-white divide-y divide-gray-200">
@@ -81,6 +83,13 @@
             </div>
             <p id="no-results" class="text-center text-gray-500 py-8 hidden">No reports found.</p>
 
+            <!-- NEW Load More Button -->
+            <div class="mt-6 text-center">
+                <button id="load-more-btn" class="hidden bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-5 rounded-lg transition duration-300">
+                    Load More Reports
+                </button>
+            </div>
+
         </div>
     </div>
 
@@ -89,7 +98,11 @@
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, getDocs, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // *** IMPORTS MODIFIED ***
+        import { 
+            getFirestore, collection, getDocs, query, 
+            orderBy, limit, startAfter 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -110,10 +123,14 @@
 
         // --- Initialize Firebase ---
         let app, auth, db;
+        let masterLogRef;
         try {
             app = initializeApp(finalFirebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
+            // Define the path to the master log
+            const masterLogPath = `artifacts/${appId}/public/data/master_log`;
+            masterLogRef = collection(db, masterLogPath);
         } catch (e) {
             console.error("Firebase initialization error:", e);
             document.getElementById("loading-text").textContent = "Error: Could not connect to Firebase.";
@@ -124,21 +141,21 @@
         const loadingText = document.getElementById("loading-text");
         const reportContainer = document.getElementById("report-container");
         const fetchBtn = document.getElementById("fetch-reports-btn");
-        const downloadBtn = document.getElementById("download-csv-btn");
+        const loadMoreBtn = document.getElementById("load-more-btn"); // New button
+        const downloadCsvBtn = document.getElementById("download-csv-btn");
+        const downloadExcelBtn = document.getElementById("download-excel-btn");
+        const downloadPdfBtn = document.getElementById("download-pdf-btn");
         const tableBody = document.getElementById("report-table-body");
         const noResults = document.getElementById("no-results");
         const reportStatus = document.getElementById("report-status");
 
+        const filterName = document.getElementById("filter-name");
         const filterClass = document.getElementById("filter-class");
-        const filterStudentId = document.getElementById("filter-student-id");
         const filterCourse = document.getElementById("filter-course");
-
-        // --- NEW ---
-        const downloadExcelBtn = document.getElementById("download-excel-btn");
-        const downloadPdfBtn = document.getElementById("download-pdf-btn");
-        // --- END NEW ---
-
-        let allReportData = []; // To store fetched data
+        
+        let allReportData = []; // To store all fetched log data
+        let lastVisibleDoc = null; // To track pagination
+        const REPORTS_PER_PAGE = 50; // Set page size
 
         // --- Authentication ---
         onAuthStateChanged(auth, async (user) => {
@@ -157,70 +174,145 @@
                     return;
                 }
             }
+            
             // User is authenticated
             loadingContainer.classList.add("hidden");
             reportContainer.classList.remove("hidden");
         });
 
         // --- Event Listeners ---
-        fetchBtn.addEventListener("click", fetchReports);
-        downloadBtn.addEventListener("click", downloadCSV);
-        
-        // --- NEW ---
+        fetchBtn.addEventListener("click", fetchInitialReports); // Changed
+        loadMoreBtn.addEventListener("click", fetchMoreReports); // New
+        downloadCsvBtn.addEventListener("click", downloadCSV);
         downloadExcelBtn.addEventListener("click", downloadExcel);
         downloadPdfBtn.addEventListener("click", downloadPDF);
-        // --- END NEW ---
 
         // Add listeners for filters
-        [filterClass, filterStudentId, filterCourse].forEach(input => {
+        [filterName, filterClass, filterCourse].forEach(input => {
             input.addEventListener('input', applyFilters);
         });
 
         /**
-         * Fetches all logs from the 'master_log' collection.
+         * Fetches the *first* page of logs from the 'master_log' collection.
          */
-        async function fetchReports() {
+        async function fetchInitialReports() {
             fetchBtn.disabled = true;
             fetchBtn.textContent = "Fetching...";
-            reportStatus.textContent = "Loading data from Firestore...";
+            reportStatus.textContent = "Loading reports from Firestore...";
             noResults.classList.add("hidden");
+            loadMoreBtn.classList.add("hidden"); // Hide load more button
+            
+            // Clear all old data
+            allReportData = [];
+            lastVisibleDoc = null;
+            tableBody.innerHTML = "";
 
             try {
-                const logPath = `artifacts/${appId}/public/data/master_log`;
-                const q = query(collection(db, logPath));
+                // Query for the first 50 reports, ordered by timestamp
+                const q = query(masterLogRef, 
+                                orderBy("timestamp", "desc"), 
+                                limit(REPORTS_PER_PAGE));
                 
                 const querySnapshot = await getDocs(q);
                 
+                if (querySnapshot.empty) {
+                    noResults.classList.remove("hidden");
+                    reportStatus.textContent = "No reports found.";
+                    downloadCsvBtn.classList.add("hidden");
+                    downloadExcelBtn.classList.add("hidden");
+                    downloadPdfBtn.classList.add("hidden");
+                    return;
+                }
+
+                // Store the last visible document for pagination
+                lastVisibleDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+                
                 allReportData = querySnapshot.docs.map(doc => doc.data());
                 
-                // Sort by timestamp (newest first)
-                allReportData.sort((a, b) => {
-                    const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
-                    const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
-                    return timeB - timeA;
-                });
-
-                if (allReportData.length > 0) {
-                    applyFilters(); // Display the data
-                    downloadBtn.classList.remove("hidden");
-                    downloadExcelBtn.classList.remove("hidden"); // NEW
-                    downloadPdfBtn.classList.remove("hidden"); // NEW
-                    reportStatus.textContent = `Fetched ${allReportData.length} total records.`;
-                } else {
-                    tableBody.innerHTML = ""; // Clear table
-                    noResults.classList.remove("hidden");
-                    downloadBtn.classList.add("hidden");
-                    downloadExcelBtn.classList.add("hidden"); // NEW
-                    downloadPdfBtn.classList.add("hidden"); // NEW
-                    reportStatus.textContent = "No records found.";
+                applyFilters(); // Display the data
+                
+                // Show download buttons
+                downloadCsvBtn.classList.remove("hidden");
+                downloadExcelBtn.classList.remove("hidden");
+                downloadPdfBtn.classList.remove("hidden");
+                
+                // Show "Load More" button if we got a full page
+                if (querySnapshot.size === REPORTS_PER_PAGE) {
+                    loadMoreBtn.classList.remove("hidden");
                 }
+                
+                reportStatus.textContent = `Fetched ${allReportData.length} reports.`;
 
             } catch (error) {
                 console.error("Error fetching reports:", error);
-                reportStatus.textContent = `Error fetching reports: ${error.message}`;
+                // --- THIS IS IMPORTANT ---
+                // This error likely means you need to create a Firebase Index.
+                // The error message in your browser console will have a link to create it.
+                if (error.code === 'failed-precondition') {
+                    reportStatus.innerHTML = `<strong>Error:</strong> Firestore index required. Please open the browser console (F12), find the error message, and click the link to create the index.`;
+                } else {
+                    reportStatus.textContent = `Error fetching reports: ${error.message}`;
+                }
             } finally {
                 fetchBtn.disabled = false;
-                fetchBtn.textContent = "Fetch All Reports";
+                fetchBtn.textContent = "Fetch Reports";
+            }
+        }
+
+        /**
+         * Fetches the *next* page of reports.
+         */
+        async function fetchMoreReports() {
+            if (!lastVisibleDoc) {
+                console.log("No more documents to load.");
+                loadMoreBtn.classList.add("hidden");
+                return;
+            }
+
+            loadMoreBtn.disabled = true;
+            loadMoreBtn.textContent = "Loading...";
+
+            try {
+                // Query for the next 50, starting *after* the last one we saw
+                const q = query(masterLogRef, 
+                                orderBy("timestamp", "desc"), 
+                                startAfter(lastVisibleDoc),
+                                limit(REPORTS_PER_PAGE));
+
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    // No more documents found
+                    lastVisibleDoc = null;
+                    loadMoreBtn.classList.add("hidden");
+                    reportStatus.textContent = `All ${allReportData.length} reports loaded.`;
+                    return;
+                }
+
+                // Update the last visible doc
+                lastVisibleDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+
+                // Add the new reports to our existing data
+                const newReports = querySnapshot.docs.map(doc => doc.data());
+                allReportData.push(...newReports);
+
+                // Re-apply filters to the entire (now larger) dataset
+                applyFilters();
+
+                // Show "Load More" button if we got another full page
+                if (querySnapshot.size < REPORTS_PER_PAGE) {
+                    loadMoreBtn.classList.add("hidden"); // We've reached the end
+                    reportStatus.textContent = `All ${allReportData.length} reports loaded.`;
+                } else {
+                    reportStatus.textContent = `Fetched ${allReportData.length} total reports.`;
+                }
+
+            } catch (error) {
+                console.error("Error fetching more reports:", error);
+                reportStatus.textContent = `Error: ${error.message}`;
+            } finally {
+                loadMoreBtn.disabled = false;
+                loadMoreBtn.textContent = "Load More Reports";
             }
         }
 
@@ -228,25 +320,17 @@
          * Applies the current filters to the 'allReportData' and updates the table.
          */
         function applyFilters() {
+            const nameFilter = filterName.value.toLowerCase();
             const classFilter = filterClass.value.toLowerCase();
-            const idFilter = filterStudentId.value.toLowerCase();
             const courseFilter = filterCourse.value.toLowerCase();
 
-            const filteredData = allReportData.filter(log => {
-                const logClass = (log.class || "").toLowerCase();
-                const logStudentId = (log.studentId || "").toLowerCase();
-                const logCourse = (log.course || "").toLowerCase();
-
-                return logClass.includes(classFilter) &&
-                       logStudentId.includes(idFilter) &&
-                       logCourse.includes(courseFilter);
-            });
-
+            const filteredData = getFilteredData(nameFilter, classFilter, courseFilter);
             populateTable(filteredData);
         }
 
         /**
-         * Populates the HTML table with filtered report data.
+         * Populates the HTML table with filtered log data.
+         * This function now *replaces* the table body every time.
          */
         function populateTable(data) {
             if (data.length === 0) {
@@ -265,78 +349,58 @@
                     timeStyle: 'short' 
                 });
                 
-                const statusClass = log.isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-                const statusText = log.isSuccess ? 'Success' : 'Failed';
-
+                // *** TABLE ROW MODIFIED ***
                 tableHtml += `
                     <tr class="text-sm text-gray-700">
-                        <td class="px-4 py-3">
-                            <span class="px-2 py-1 font-semibold leading-tight text-xs rounded-full ${statusClass}">
-                                ${statusText}
-                            </span>
-                        </td>
                         <td class="px-4 py-3 whitespace-nowrap">${dateStr}</td>
-                        <td class="px-4 py-3 font-medium">${log.userName || 'N/A'}</td>
-                        <td class="px-4 py-3">${log.studentId || 'N/A'}</td>
-                        <td class="px-4 py-3">${log.class || 'N/A'}</td>
-                        <td class="px-4 py-3">${log.course || 'N/A'}</td>
-                        <td class="px-4 py-3">${log.teacher || 'N/A'}</td>
-                        <td class="px-4 py-3">${log.reportedDistance != null ? Math.round(log.reportedDistance) : 'N/A'}</td>
+                        <td class="px-4 py-3">${escapeHTML(log.userName || 'N/A')}</td>
+                        <td class="px-4 py-3">${escapeHTML(log.class || 'N/A')}</td>
+                        <td class="px-4 py-3">${escapeHTML(log.course || 'N/A')}</td>
+                        <td class="px-4 py-3">${escapeHTML(log.teacher || 'N/A')}</td>
                     </tr>
                 `;
             });
 
             tableBody.innerHTML = tableHtml;
         }
+        
+        // --- Download/Export Functions ---
 
         /**
          * Converts the currently *filtered* data to CSV and triggers a download.
          */
         function downloadCSV() {
-            // Get the currently filtered data
-            const classFilter = filterClass.value.toLowerCase();
-            const idFilter = filterStudentId.value.toLowerCase();
-            const courseFilter = filterCourse.value.toLowerCase();
-
-            const filteredData = allReportData.filter(log => {
-                const logClass = (log.class || "").toLowerCase();
-                const logStudentId = (log.studentId || "").toLowerCase();
-                const logCourse = (log.course || "").toLowerCase();
-
-                return logClass.includes(classFilter) &&
-                       logStudentId.includes(idFilter) &&
-                       logCourse.includes(courseFilter);
-            });
-
-            if (filteredData.length === 0) {
+            const data = getFilteredData();
+            if (data.length === 0) {
                 alert("No data to download.");
                 return;
             }
 
             let csvContent = "data:text/csv;charset=utf-8,";
             
-            // CSV Headers
+            // *** CSV HEADERS MODIFIED ***
             const headers = [
-                "Status", "Timestamp", "Student Name", "Student ID", "Class", "Course", "Teacher", 
-                "Distance (m)", "Success", "User ID", "User Agent"
+                "Timestamp", "Student Name", "Class", "Course", "Teacher", 
+                "Latitude", "Longitude", "User Agent", "Status", "Distance (m)", "User ID"
             ];
             csvContent += headers.join(",") + "\r\n";
 
-            // CSV Rows
-            filteredData.forEach(log => {
+            // *** CSV ROWS MODIFIED ***
+            data.forEach(log => {
                 const timestamp = log.timestamp ? log.timestamp.toDate().toISOString() : "";
                 const row = [
-                    log.isSuccess ? "Success" : "Failed",
                     timestamp,
                     `"${log.userName || ""}"`,
-                    `"${log.studentId || ""}"`,
                     `"${log.class || ""}"`,
                     `"${log.course || ""}"`,
                     `"${log.teacher || ""}"`,
-                    log.reportedDistance != null ? Math.round(log.reportedDistance) : "",
-                    log.isSuccess,
-                    `"${log.userId || ""}"`,
-                    `"${log.userAgent || ""}"`
+                    log.reportedLat || "",
+                    log.reportedLon || "",
+                    `"${(log.userAgent || "").replace(/"/g, '""')}"`,
+                    // Add back non-visible data for exports
+                    log.isSuccess ? "Success" : "Failed",
+                    log.reportedDistance ? log.reportedDistance.toFixed(2) : "",
+                    `"${log.userId || ""}"`
                 ];
                 csvContent += row.join(",") + "\r\n";
             });
@@ -352,8 +416,6 @@
             document.body.removeChild(link);
         }
 
-        // --- NEW FUNCTIONS ---
-
         /**
          * Converts the currently *filtered* data to an Excel (.xlsx) file and triggers a download.
          */
@@ -364,17 +426,21 @@
                 return;
             }
 
+            // *** WORKSHEET DATA MODIFIED ***
             // 1. Re-format data for the worksheet
             const worksheetData = data.map(log => ({
-                Status: log.isSuccess ? "Success" : "Failed",
-                Timestamp: log.timestamp ? log.timestamp.toDate() : "",
+                "Timestamp": log.timestamp ? log.timestamp.toDate() : "",
                 "Student Name": log.userName || "",
-                "Student ID": log.studentId || "",
-                Class: log.class || "",
-                Course: log.course || "",
-                Teacher: log.teacher || "",
-                "Distance (m)": log.reportedDistance != null ? Math.round(log.reportedDistance) : "",
-                "User ID": log.userId || ""
+                "Class": log.class || "",
+                "Course": log.course || "",
+                "Teacher": log.teacher || "",
+                // Add back non-visible data for exports
+                "Status": log.isSuccess ? "Success" : "Failed",
+                "Distance (m)": log.reportedDistance ? log.reportedDistance.toFixed(2) : "",
+                "User ID": log.userId || "",
+                "Latitude": log.reportedLat || "",
+                "Longitude": log.reportedLon || "",
+                "User Agent": log.userAgent || ""
             }));
 
             // 2. Create worksheet and workbook
@@ -382,7 +448,7 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Attendance Report");
 
-            // 3. Auto-size columns (optional but nice)
+            // 3. Auto-size columns (best guess)
             const cols = Object.keys(worksheetData[0]).map(key => ({
                 wch: Math.max(key.length, ...worksheetData.map(row => String(row[key]).length))
             }));
@@ -402,8 +468,6 @@
                 return;
             }
 
-            // 1. Initialize jsPDF
-            // Note: jsPDF is loaded from the script tag, so we can use it here
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({
                 orientation: 'landscape',
@@ -411,19 +475,18 @@
                 format: 'a4'
             });
 
-            // 2. Define Columns and Rows for autoTable
-            const head = [['Status', 'Date', 'Name', 'Student ID', 'Class', 'Course', 'Distance (m)']];
+            // *** PDF HEAD/BODY MODIFIED ***
+            // Define Columns and Rows for autoTable
+            const head = [['Timestamp', 'Student Name', 'Class', 'Course', 'Teacher']];
             const body = data.map(log => [
-                log.isSuccess ? 'Success' : 'Failed',
                 log.timestamp ? log.timestamp.toDate().toLocaleString('en-US') : '',
                 log.userName || '',
-                log.studentId || '',
                 log.class || '',
                 log.course || '',
-                log.reportedDistance != null ? Math.round(log.reportedDistance) : ''
+                log.teacher || ''
             ]);
 
-            // 3. Generate the table
+            // Generate the table
             doc.autoTable({
                 head: head,
                 body: body,
@@ -432,33 +495,45 @@
                 headStyles: { fillColor: [37, 99, 235] } // Blue header
             });
 
-            // 4. Add a title
+            // Add a title
             doc.setFontSize(18);
             doc.text("Attendance Report", 40, 35);
 
-            // 5. Trigger download
+            // Trigger download
             doc.save('attendance_report.pdf');
         }
 
         /**
-         * Helper function to get the currently filtered data.
+         * Helper function to get the currently filtered data based on all filters.
          */
-        function getFilteredData() {
-            const classFilter = filterClass.value.toLowerCase();
-            const idFilter = filterStudentId.value.toLowerCase();
-            const courseFilter = filterCourse.value.toLowerCase();
-
+        function getFilteredData(
+            nameFilter = filterName.value.toLowerCase(),
+            classFilter = filterClass.value.toLowerCase(),
+            courseFilter = filterCourse.value.toLowerCase()
+        ) {
             return allReportData.filter(log => {
+                const logName = (log.userName || "").toLowerCase();
                 const logClass = (log.class || "").toLowerCase();
-                const logStudentId = (log.studentId || "").toLowerCase();
                 const logCourse = (log.course || "").toLowerCase();
 
-                return logClass.includes(classFilter) &&
-                       logStudentId.includes(idFilter) &&
+                return logName.includes(nameFilter) &&
+                       logClass.includes(classFilter) &&
                        logCourse.includes(courseFilter);
             });
         }
-        // --- END NEW FUNCTIONS ---
+        
+        /**
+         * Simple HTML escaper to prevent XSS
+         */
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.toString()
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
 
     </script>
 </body>
