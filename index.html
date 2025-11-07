@@ -135,16 +135,13 @@
                 <!-- Final Result: Success or Error -->
                 <div id="final-message" class="hidden mt-4"></div>
 
-                <!-- *** LINK REMOVED *** -->
-                <!-- This container now only shows a success message, not a link. -->
+                <!-- Link Removed: This container now only shows a success message -->
                 <div id="attendance-link-container" class="hidden mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                     <h4 class="font-semibold text-green-800">Access Granted!</h4>
                     <p class="text-sm text-gray-700">
                         Your successful check-in has been logged.
                     </p>
                 </div>
-                <!-- *** END OF CHANGE *** -->
-
             </div>
         </div>
 
@@ -155,7 +152,7 @@
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // *** IMPORT UPDATED ***
+        // *** IMPORTS UPDATED (addDoc added) ***
         import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, Timestamp, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
@@ -188,9 +185,9 @@
 
         // --- UI Elements ---
         const loadingContainer = document.getElementById("loading-container");
-        const permissionsContainer = document.getElementById("permissions-container"); // New
-        const grantPermissionsBtn = document.getElementById("grant-permissions-btn"); // New
-        const permissionsMessage = document.getElementById("permissions-message"); // New
+        const permissionsContainer = document.getElementById("permissions-container"); 
+        const grantPermissionsBtn = document.getElementById("grant-permissions-btn"); 
+        const permissionsMessage = document.getElementById("permissions-message"); 
         const registrationContainer = document.getElementById("registration-container");
         const scannerContainer = document.getElementById("scanner-container");
         const welcomeMessage = document.getElementById("welcome-message");
@@ -211,9 +208,6 @@
 
         const finalMessageDiv = document.getElementById("final-message");
         const linkContainer = document.getElementById("attendance-link-container");
-
-        // --- NEW ---
-        let currentUserData = null; // Will store all user profile data
 
         // --- Firebase Authentication ---
         onAuthStateChanged(auth, async (user) => {
@@ -353,15 +347,17 @@
 
                 if (userDoc.exists() && userDoc.data().name) {
                     // User is registered
-                    currentUserData = userDoc.data(); // <-- Store all data
-                    currentUserName = currentUserData.name; // <-- Keep this for existing logic
+                    const userData = userDoc.data();
+                    currentUserName = userData.name;
+                    // Store student ID globally for logging
+                    window.currentUserStudentId = userData.studentId; 
+
                     welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
                     welcomeMessage.classList.remove("hidden");
                     scannerContainer.classList.remove("hidden");
                     initializeScanner(); // Start the scanner
                 } else {
                     // User is not registered
-                    currentUserData = {}; // User is not registered, set to empty object
                     userUidDisplay.textContent = currentUserId;
                     registrationContainer.classList.remove("hidden");
                 }
@@ -393,16 +389,32 @@
             }
 
             registerBtn.disabled = true;
-            registerBtn.textContent = "Registering...";
+            registerBtn.textContent = "Checking Student ID...";
             registerMessage.textContent = "";
 
             try {
+                // --- NEW: Check for duplicate Student ID ---
+                const usersCollectionPath = `artifacts/${appId}/public/data/users`;
+                const usersRef = collection(db, usersCollectionPath);
+                const q = query(usersRef, where("studentId", "==", studentId));
+                
+                const querySnapshot = await getDocs(q);
+                
+                if (!querySnapshot.empty) {
+                    // Duplicate found
+                    registerMessage.textContent = "This Student ID is already registered.";
+                    registerMessage.className = "text-sm text-center mt-3 text-red-600";
+                    registerBtn.disabled = false;
+                    registerBtn.textContent = "Register";
+                    return; // Stop registration
+                }
+                // --- End of duplicate check ---
+
+                registerBtn.textContent = "Registering...";
+
                 // Save all fields to Firestore
                 const userDocPath = `artifacts/${appId}/public/data/users/${currentUserId}`;
-                
-                // --- NEW ---
-                // Create the data object to save
-                const registrationData = {
+                await setDoc(doc(db, userDocPath), {
                     userId: currentUserId,
                     studentId: studentId,
                     name: name,
@@ -413,13 +425,12 @@
                     academicYear: academicYear,
                     class: studentClass,
                     registeredAt: serverTimestamp()
-                };
-                
-                await setDoc(doc(db, userDocPath), registrationData);
+                });
 
                 // Registration successful!
-                currentUserData = registrationData; // <-- Store the new data
                 currentUserName = name; // Set the name for the welcome message
+                window.currentUserStudentId = studentId; // Store student ID globally
+
                 registrationContainer.classList.add("hidden");
                 welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
                 welcomeMessage.classList.remove("hidden");
@@ -437,7 +448,7 @@
 
 
         // --- App State ---
-        let classData = null; // Will hold { name, teacherName, lat, lon, radius }
+        let classData = null; // Will hold { name, teacherName, course, lat, lon, radius }
         let html5QrCode; // Using the core class, not the scanner UI
 
         // --- 1. QR Code Scanning Logic ---
@@ -549,7 +560,9 @@
             document.getElementById("stop-scan-btn").classList.add("hidden");
         }
 
-        // *** MODIFIED FUNCTION ***
+        /**
+         * QR Scan Success Callback
+         */
         function onScanSuccess(decodedText, decodedResult) {
             stopScanning();
             console.log(`Scan result: ${decodedText}`);
@@ -561,11 +574,11 @@
 
                 classData = {
                     name: parts[0],
-                    teacherName: parts[1], // <-- Added new field
+                    teacherName: parts[1],
                     course: parts[2], // <-- Added new field
-                    lat: parseFloat(parts[3]), // <-- Index changed from 2 to 3
-                    lon: parseFloat(parts[4]), // <-- Index changed from 3 to 4
-                    radius: parseFloat(parts[5]) // <-- Index changed from 4 to 5
+                    lat: parseFloat(parts[3]), 
+                    lon: parseFloat(parts[4]), 
+                    radius: parseFloat(parts[5])
                 };
 
                 if (isNaN(classData.lat) || isNaN(classData.lon) || isNaN(classData.radius)) {
@@ -717,52 +730,53 @@
         }
 
         // --- 4. Firebase Logging ---
-        // *** MODIFIED FUNCTION ***
+        /**
+         * Logs the attendance attempt to two places:
+         * 1. The individual student's log (for the 1-hour check)
+         * 2. The new 'master_log' (for the admin report)
+         */
         async function logAttendanceAttempt(isSuccess, distance, userLat, userLon) {
             if (!currentUserId || !classData) {
                 console.warn("Missing user ID or class data. Skipping log.");
                 return;
             }
 
-            // --- NEW ---
-            // Create the master log data object first
+            const studentName = currentUserName || "N/A";
+            const studentId = window.currentUserStudentId || "N/A";
+
             const logData = {
                 userId: currentUserId,
-                userName: currentUserData ? currentUserData.name : "Not Registered",
-                studentId: currentUserData ? currentUserData.studentId : "N/A",
+                userName: studentName,
+                studentId: studentId,
                 class: classData.name,
                 teacher: classData.teacherName,
                 course: classData.course,
-                timestamp: serverTimestamp(), // This will be processed by Firestore
+                timestamp: serverTimestamp(),
                 isSuccess: isSuccess,
                 reportedDistance: distance,
                 reportedLat: userLat,
                 reportedLon: userLon,
-                userAgent: navigator.userAgent,
-                // Add student profile data to the log
-                studentProfile: currentUserData || {}
+                userAgent: navigator.userAgent
             };
-            // --- END NEW ---
 
+            // Log 1: Individual log for 1-hour check
             try {
-                // Log to specific attempt path
                 const attemptId = `attempt_${Date.now()}`;
                 const logPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts/${attemptId}`;
                 const logRef = doc(db, logPath);
-                
-                await setDoc(logRef, logData); 
-                console.log("Attendance attempt logged to Firestore.");
-
-                // --- NEW ---
-                // Log a copy to the master report collection
-                // The master log will have its own unique ID generated by addDoc
-                const masterLogRef = collection(db, `artifacts/${appId}/public/data/master_log`);
-                await addDoc(masterLogRef, logData);
-                console.log("Logged copy to master report.");
-                // --- END NEW ---
-
+                await setDoc(logRef, logData);
+                console.log("Individual attendance attempt logged.");
             } catch (error) {
-                console.error("Firestore logging error:", error);
+                console.error("Firestore individual logging error:", error);
+            }
+
+            // Log 2: Master log for admin report
+            try {
+                const masterLogPath = `artifacts/${appId}/public/data/master_log`;
+                await addDoc(collection(db, masterLogPath), logData);
+                console.log("Master attendance attempt logged.");
+            } catch (error) {
+                console.error("Firestore master logging error:", error);
             }
         }
 
