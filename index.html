@@ -212,6 +212,9 @@
         const finalMessageDiv = document.getElementById("final-message");
         const linkContainer = document.getElementById("attendance-link-container");
 
+        // --- NEW ---
+        let currentUserData = null; // Will store all user profile data
+
         // --- Firebase Authentication ---
         onAuthStateChanged(auth, async (user) => {
             let authUser = user;
@@ -350,13 +353,15 @@
 
                 if (userDoc.exists() && userDoc.data().name) {
                     // User is registered
-                    currentUserName = userDoc.data().name;
+                    currentUserData = userDoc.data(); // <-- Store all data
+                    currentUserName = currentUserData.name; // <-- Keep this for existing logic
                     welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
                     welcomeMessage.classList.remove("hidden");
                     scannerContainer.classList.remove("hidden");
                     initializeScanner(); // Start the scanner
                 } else {
                     // User is not registered
+                    currentUserData = {}; // User is not registered, set to empty object
                     userUidDisplay.textContent = currentUserId;
                     registrationContainer.classList.remove("hidden");
                 }
@@ -394,7 +399,10 @@
             try {
                 // Save all fields to Firestore
                 const userDocPath = `artifacts/${appId}/public/data/users/${currentUserId}`;
-                await setDoc(doc(db, userDocPath), {
+                
+                // --- NEW ---
+                // Create the data object to save
+                const registrationData = {
                     userId: currentUserId,
                     studentId: studentId,
                     name: name,
@@ -405,9 +413,12 @@
                     academicYear: academicYear,
                     class: studentClass,
                     registeredAt: serverTimestamp()
-                });
+                };
+                
+                await setDoc(doc(db, userDocPath), registrationData);
 
                 // Registration successful!
+                currentUserData = registrationData; // <-- Store the new data
                 currentUserName = name; // Set the name for the welcome message
                 registrationContainer.classList.add("hidden");
                 welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
@@ -426,7 +437,7 @@
 
 
         // --- App State ---
-        let classData = null; // Will hold { name, lat, lon, radius }
+        let classData = null; // Will hold { name, teacherName, lat, lon, radius }
         let html5QrCode; // Using the core class, not the scanner UI
 
         // --- 1. QR Code Scanning Logic ---
@@ -538,21 +549,23 @@
             document.getElementById("stop-scan-btn").classList.add("hidden");
         }
 
-
+        // *** MODIFIED FUNCTION ***
         function onScanSuccess(decodedText, decodedResult) {
             stopScanning();
             console.log(`Scan result: ${decodedText}`);
 
             try {
-                // Parse the data: "Class A|12.7299|104.8908|50"
+                // Parse the new data: "Class|Teacher_Name|Course|11.551464|104.928236|50"
                 const parts = decodedText.split('|');
-                if (parts.length !== 4) throw new Error("Invalid QR code format.");
+                if (parts.length !== 6) throw new Error("Invalid QR code format. Expected 6 parts.");
 
                 classData = {
                     name: parts[0],
-                    lat: parseFloat(parts[1]),
-                    lon: parseFloat(parts[2]),
-                    radius: parseFloat(parts[3]) // Radius in meters
+                    teacherName: parts[1], // <-- Added new field
+                    course: parts[2], // <-- Added new field
+                    lat: parseFloat(parts[3]), // <-- Index changed from 2 to 3
+                    lon: parseFloat(parts[4]), // <-- Index changed from 3 to 4
+                    radius: parseFloat(parts[5]) // <-- Index changed from 4 to 5
                 };
 
                 if (isNaN(classData.lat) || isNaN(classData.lon) || isNaN(classData.radius)) {
@@ -561,8 +574,7 @@
 
                 finalMessageDiv.classList.add("hidden");
                 
-                // *** MODIFIED CALL ***
-                // Instead of going straight to location check, call the new time check function
+                // Call the time check function
                 checkLastScanTimeAndProceed();
 
             } catch (error) {
@@ -705,31 +717,49 @@
         }
 
         // --- 4. Firebase Logging ---
+        // *** MODIFIED FUNCTION ***
         async function logAttendanceAttempt(isSuccess, distance, userLat, userLon) {
             if (!currentUserId || !classData) {
                 console.warn("Missing user ID or class data. Skipping log.");
                 return;
             }
 
+            // --- NEW ---
+            // Create the master log data object first
+            const logData = {
+                userId: currentUserId,
+                userName: currentUserData ? currentUserData.name : "Not Registered",
+                studentId: currentUserData ? currentUserData.studentId : "N/A",
+                class: classData.name,
+                teacher: classData.teacherName,
+                course: classData.course,
+                timestamp: serverTimestamp(), // This will be processed by Firestore
+                isSuccess: isSuccess,
+                reportedDistance: distance,
+                reportedLat: userLat,
+                reportedLon: userLon,
+                userAgent: navigator.userAgent,
+                // Add student profile data to the log
+                studentProfile: currentUserData || {}
+            };
+            // --- END NEW ---
+
             try {
-                // We create a unique ID for this *specific attempt*
+                // Log to specific attempt path
                 const attemptId = `attempt_${Date.now()}`;
                 const logPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts/${attemptId}`;
                 const logRef = doc(db, logPath);
                 
-                await setDoc(logRef, {
-                    userId: currentUserId,
-                    userName: currentUserName || "Not Registered", // Use the name from registration
-                    class: classData.name,
-                    timestamp: serverTimestamp(),
-                    isSuccess: isSuccess,
-                    reportedDistance: distance,
-                    reportedLat: userLat,
-                    reportedLon: userLon,
-                    userAgent: navigator.userAgent
-                });
-
+                await setDoc(logRef, logData); 
                 console.log("Attendance attempt logged to Firestore.");
+
+                // --- NEW ---
+                // Log a copy to the master report collection
+                // The master log will have its own unique ID generated by addDoc
+                const masterLogRef = collection(db, `artifacts/${appId}/public/data/master_log`);
+                await addDoc(masterLogRef, logData);
+                console.log("Logged copy to master report.");
+                // --- END NEW ---
 
             } catch (error) {
                 console.error("Firestore logging error:", error);
@@ -784,4 +814,3 @@
     </script>
 </body>
 </html>
-
