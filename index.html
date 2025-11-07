@@ -155,8 +155,8 @@
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // *** NEW IMPORTS ADDED ***
-        import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // *** IMPORT UPDATED ***
+        import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, Timestamp, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
