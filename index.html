@@ -26,7 +26,7 @@
 </head>
 <body class="bg-gray-100 font-sans min-h-screen flex items-center justify-center p-4">
 
-    <!-- Card container -->
+    <!-- Card container: Changed padding from p-6 md:p-8 to p-4 sm:p-6 md:p-8 -->
     <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
         <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">Class Attendance Scanner</h1>
 
@@ -42,6 +42,18 @@
             <p class="mt-3 font-medium text-gray-600">Connecting to service...</p>
         </div>
 
+        <!-- New Permissions Container (hidden by default) -->
+        <div id="permissions-container" class="hidden">
+            <h2 class="text-lg font-semibold text-center text-gray-700 mb-3">Permissions Required</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                This app needs access to your <strong>Location</strong> (to verify you are in class) and your <strong>Camera</strong> (to scan the QR code).
+            </p>
+            <button id="grant-permissions-btn" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+                Grant Permissions
+            </button>
+            <div id="permissions-message" class="text-sm text-center mt-3 text-red-600"></div>
+        </div>
+
         <!-- Registration Container (hidden by default) -->
         <div id="registration-container" class="hidden">
             <h2 class="text-lg font-semibold text-center text-gray-700 mb-3">Register Your Profile</h2>
@@ -52,12 +64,12 @@
             <div class="space-y-4">
                 <div>
                     <label for="student-id" class="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-                    <input type="text" id="student-id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., KCP00123">
+                    <input type="text" id="student-id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 8031">
                 </div>
 
                 <div>
                     <label for="student-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                    <input type="text" id="student-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., John Doe">
+                    <input type="text" id="student-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Chenda Nary">
                 </div>
 
                 <div>
@@ -81,7 +93,7 @@
 
                 <div>
                     <label for="student-program" class="block text-sm font-medium text-gray-700 mb-1">Program</label>
-                    <input type="text" id="student-program" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Bachelor of IT">
+                    <input type="text" id="student-program" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 12+2">
                 </div>
 
                 <div>
@@ -91,7 +103,7 @@
 
                 <div>
                     <label for="student-class" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                    <input type="text" id="student-class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., M1">
+                    <input type="text" id="student-class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., A1">
                 </div>
             </div>
             
@@ -123,16 +135,13 @@
                 <!-- Final Result: Success or Error -->
                 <div id="final-message" class="hidden mt-4"></div>
 
-                <!-- *** LINK REMOVED *** -->
-                <!-- This container now only shows a success message, not a link. -->
+                <!-- Link Removed: This container now only shows a success message -->
                 <div id="attendance-link-container" class="hidden mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                     <h4 class="font-semibold text-green-800">Access Granted!</h4>
                     <p class="text-sm text-gray-700">
                         Your successful check-in has been logged.
                     </p>
                 </div>
-                <!-- *** END OF CHANGE *** -->
-
             </div>
         </div>
 
@@ -143,11 +152,8 @@
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // *** IMPORTS UPDATED ***
-        import { 
-            getFirestore, doc, setDoc, getDoc, serverTimestamp, 
-            collection, query, where, getDocs, Timestamp, addDoc 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // *** IMPORTS UPDATED (addDoc added) ***
+        import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, Timestamp, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -168,15 +174,10 @@
 
         // --- Initialize Firebase ---
         let app, auth, db, currentUserId, currentUserName;
-        let usersCollectionRef; // Reference to 'users' collection
-        
         try {
             app = initializeApp(finalFirebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-            // Define the path to the users collection
-            const usersPath = `artifacts/${appId}/public/data/users`;
-            usersCollectionRef = collection(db, usersPath);
         } catch (e) {
             console.error("Firebase initialization error:", e);
             document.getElementById("loading-container").innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Could not connect to Firebase. Check console.</div>`;
@@ -184,6 +185,9 @@
 
         // --- UI Elements ---
         const loadingContainer = document.getElementById("loading-container");
+        const permissionsContainer = document.getElementById("permissions-container"); 
+        const grantPermissionsBtn = document.getElementById("grant-permissions-btn"); 
+        const permissionsMessage = document.getElementById("permissions-message"); 
         const registrationContainer = document.getElementById("registration-container");
         const scannerContainer = document.getElementById("scanner-container");
         const welcomeMessage = document.getElementById("welcome-message");
@@ -229,17 +233,113 @@
             currentUserId = authUser.uid;
             console.log("User authenticated:", currentUserId);
 
-            // --- Original Flow: Check registration ---
-            await proceedToRegistrationCheck();
+            // --- New Flow: Show permissions screen ---
+            loadingContainer.classList.add("hidden");
+            permissionsContainer.classList.remove("hidden");
         });
 
-        
+        // --- New Permissions Logic ---
+        grantPermissionsBtn.addEventListener("click", async () => {
+            grantPermissionsBtn.disabled = true;
+            grantPermissionsBtn.textContent = "Requesting Location...";
+            permissionsMessage.textContent = "";
+
+            try {
+                // 1. Request Location
+                await requestLocationPermission();
+                console.log("Location permission granted.");
+                
+                grantPermissionsBtn.textContent = "Requesting Camera...";
+                
+                // 2. Request Camera
+                await requestCameraPermission();
+                console.log("Camera permission granted.");
+
+                // 3. Both granted, proceed to app
+                permissionsContainer.classList.add("hidden");
+                await proceedToRegistrationCheck();
+
+            } catch (error) {
+                // Handle denial or error
+                console.error("Permission error:", error.message);
+                permissionsMessage.textContent = error.message;
+                grantPermissionsBtn.disabled = false;
+                grantPermissionsBtn.textContent = "Grant Permissions";
+            }
+        });
+
         /**
-         * Checks Firestore for user registration.
+         * Wraps Geolocation request in a Promise.
+         */
+        function requestLocationPermission() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("Geolocation is not supported by your browser."));
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Success
+                        resolve(position);
+                    },
+                    (error) => {
+                        // Error
+                        let msg = "Could not get location. ";
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                msg = "Location access denied. Please enable it in your browser settings to continue.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                msg = "Location information is unavailable. Please try again.";
+                                break;
+                            case error.TIMEOUT:
+                                msg = "The request to get location timed out. Please try again.";
+                                break;
+                            default:
+                                msg = "An unknown location error occurred. Please try again.";
+                                break;
+                        }
+                        reject(new Error(msg));
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000, // 10 second timeout for the request
+                        maximumAge: 0 
+                    }
+                );
+            });
+        }
+
+        /**
+         * Wraps Camera request in a Promise.
+         */
+        async function requestCameraPermission() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("Camera access (getUserMedia) is not supported by your browser.");
+            }
+            
+            try {
+                // Request video stream
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Stop all tracks immediately, we only needed the permission.
+                stream.getTracks().forEach(track => track.stop());
+                return; // Success
+            } catch (err) {
+                console.error("getUserMedia error:", err);
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    throw new Error("Camera access denied. Please enable it in your browser settings to continue.");
+                }
+                throw new Error("Could not access camera. Please try again.");
+            }
+        }
+
+
+        /**
+         * Checks Firestore for user registration. (Moved from onAuthStateChanged)
          */
         async function proceedToRegistrationCheck() {
-            // This doc ref path is special: the doc ID *is* the user's UID
-            const userDocRef = doc(db, `artifacts/${appId}/public/data/users/${currentUserId}`);
+            const userDocPath = `artifacts/${appId}/public/data/users/${currentUserId}`;
+            const userDocRef = doc(db, userDocPath);
             
             try {
                 const userDoc = await getDoc(userDocRef);
@@ -247,7 +347,11 @@
 
                 if (userDoc.exists() && userDoc.data().name) {
                     // User is registered
-                    currentUserName = userDoc.data().name;
+                    const userData = userDoc.data();
+                    currentUserName = userData.name;
+                    // Store student ID globally for logging
+                    window.currentUserStudentId = userData.studentId; 
+
                     welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
                     welcomeMessage.classList.remove("hidden");
                     scannerContainer.classList.remove("hidden");
@@ -259,7 +363,9 @@
                 }
             } catch (error) {
                 console.error("Error checking user registration:", error);
-                loadingContainer.innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Could not check user status. Please refresh.</div>`;
+                // Show error in a more central way if permissions are granted but firestore fails
+                permissionsContainer.classList.remove("hidden");
+                permissionsMessage.textContent = "Error: Could not check user status. Please refresh.";
             }
         }
 
@@ -288,22 +394,28 @@
 
             try {
                 // --- NEW: Check for duplicate Student ID ---
-                const q = query(usersCollectionRef, where("studentId", "==", studentId));
+                const usersCollectionPath = `artifacts/${appId}/public/data/users`;
+                const usersRef = collection(db, usersCollectionPath);
+                const q = query(usersRef, where("studentId", "==", studentId));
+                
                 const querySnapshot = await getDocs(q);
-
+                
                 if (!querySnapshot.empty) {
-                    // A document with this student ID already exists
-                    throw new Error("This Student ID is already registered.");
+                    // Duplicate found
+                    registerMessage.textContent = "This Student ID is already registered.";
+                    registerMessage.className = "text-sm text-center mt-3 text-red-600";
+                    registerBtn.disabled = false;
+                    registerBtn.textContent = "Register";
+                    return; // Stop registration
                 }
-                
-                // --- No duplicate found, proceed with registration ---
+                // --- End of duplicate check ---
+
                 registerBtn.textContent = "Registering...";
-                
+
                 // Save all fields to Firestore
-                // We use the auth UID as the document ID
                 const userDocPath = `artifacts/${appId}/public/data/users/${currentUserId}`;
                 await setDoc(doc(db, userDocPath), {
-                    userId: currentUserId, // This is the auth UID
+                    userId: currentUserId,
                     studentId: studentId,
                     name: name,
                     sex: sex,
@@ -317,6 +429,8 @@
 
                 // Registration successful!
                 currentUserName = name; // Set the name for the welcome message
+                window.currentUserStudentId = studentId; // Store student ID globally
+
                 registrationContainer.classList.add("hidden");
                 welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
                 welcomeMessage.classList.remove("hidden");
@@ -325,7 +439,7 @@
 
             } catch (error) {
                 console.error("Error saving registration:", error);
-                registerMessage.textContent = `Error: ${error.message}`;
+                registerMessage.textContent = "Error: Could not save registration. Please try again.";
                 registerMessage.className = "text-sm text-center mt-3 text-red-600";
                 registerBtn.disabled = false;
                 registerBtn.textContent = "Register";
@@ -365,7 +479,6 @@
                 finalMessageDiv.classList.add("hidden"); 
                 linkContainer.classList.add("hidden"); // Hide previous success message
 
-                // Request camera permission *just in time*
                 const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
                 Html5Qrcode.getCameras().then(cameras => {
@@ -395,23 +508,17 @@
                         onScanError    
                     ).catch((err) => {
                         console.error("Camera start error (attempt 1):", err);
-                        // Fallback to default environment camera
                         html5QrCode.start(
                             { facingMode: "environment" }, config, onScanSuccess, onScanError
                         ).catch((fallbackErr) => {
                             console.error("Fallback camera start error (attempt 2):", fallbackErr);
-                            let msg = "Failed to start camera.";
-                            if (fallbackErr.name === "NotAllowedError" || fallbackErr.name === "PermissionDeniedError") {
-                                msg = "Camera access denied. Please grant permission and try again.";
-                            }
-                            showMessage("error", msg);
+                            showMessage("error", "Failed to start camera. Please grant permissions.");
                             stopScanning(); 
                         });
                     });
 
                 }).catch(err => {
                     console.error("Camera access error (getCameras):", err);
-                    // Fallback if getCameras fails (e.g., due to permissions)
                     html5QrCode.start(
                         { facingMode: "environment" }, 
                         config,
@@ -419,11 +526,7 @@
                         onScanError    
                     ).catch((startErr) => {
                         console.error("Fallback camera start error (attempt 3):", startErr);
-                        let msg = "Failed to start camera. Please grant permissions.";
-                        if (startErr.name === "NotAllowedError" || startErr.name === "PermissionDeniedError") {
-                            msg = "Camera access denied. Please grant permission and try again.";
-                        }
-                        showMessage("error", msg);
+                        showMessage("error", "Failed to start camera. Please grant permissions.");
                         stopScanning(); 
                     });
                 });
@@ -465,8 +568,7 @@
             console.log(`Scan result: ${decodedText}`);
 
             try {
-                // Parse the new 6-part data:
-                // "Class|Teacher_Name|Course|11.551464|104.928236|50"
+                // Parse the new data: "Class|Teacher_Name|Course|11.551464|104.928236|50"
                 const parts = decodedText.split('|');
                 if (parts.length !== 6) throw new Error("Invalid QR code format. Expected 6 parts.");
 
@@ -474,8 +576,8 @@
                     name: parts[0],
                     teacherName: parts[1],
                     course: parts[2], // <-- Added new field
-                    lat: parseFloat(parts[3]),
-                    lon: parseFloat(parts[4]),
+                    lat: parseFloat(parts[3]), 
+                    lon: parseFloat(parts[4]), 
                     radius: parseFloat(parts[5])
                 };
 
@@ -566,15 +668,11 @@
         // --- 3. Location Check Logic ---
         function checkLocationAndMarkAttendance() {
             if (!classData) return;
-            
-            if (!navigator.geolocation) {
-                showMessage("error", "Geolocation is not supported by your browser. Please enable it.");
-                return;
-            }
+            // We don't need to check for navigator.geolocation, as it was checked at the start.
             
             showMessage("info", "Checking your location...");
 
-            // Request location permission *just in time*
+            // We can just call getCurrentPosition, permission is already granted.
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     // Location Success
@@ -604,7 +702,8 @@
                     }
                 },
                 (error) => {
-                    // Location Error
+                    // Location Error - this shouldn't happen if permission was granted,
+                    // but could happen if location services are turned off mid-use.
                     let msg = "Could not get location. ";
                     switch(error.code) {
                         case error.PERMISSION_DENIED:
@@ -631,58 +730,53 @@
         }
 
         // --- 4. Firebase Logging ---
+        /**
+         * Logs the attendance attempt to two places:
+         * 1. The individual student's log (for the 1-hour check)
+         * 2. The new 'master_log' (for the admin report)
+         */
         async function logAttendanceAttempt(isSuccess, distance, userLat, userLon) {
             if (!currentUserId || !classData) {
                 console.warn("Missing user ID or class data. Skipping log.");
                 return;
             }
-            
-            const now = serverTimestamp(); // Use the same timestamp for both logs
+
+            const studentName = currentUserName || "N/A";
+            const studentId = window.currentUserStudentId || "N/A";
+
+            const logData = {
+                userId: currentUserId,
+                userName: studentName,
+                studentId: studentId,
+                class: classData.name,
+                teacher: classData.teacherName,
+                course: classData.course,
+                timestamp: serverTimestamp(),
+                isSuccess: isSuccess,
+                reportedDistance: distance,
+                reportedLat: userLat,
+                reportedLon: userLon,
+                userAgent: navigator.userAgent
+            };
 
             // Log 1: Individual log for 1-hour check
             try {
                 const attemptId = `attempt_${Date.now()}`;
                 const logPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts/${attemptId}`;
                 const logRef = doc(db, logPath);
-                
-                await setDoc(logRef, {
-                    userId: currentUserId,
-                    userName: currentUserName || "Not Registered",
-                    class: classData.name,
-                    teacher: classData.teacherName,
-                    course: classData.course,
-                    timestamp: now,
-                    isSuccess: isSuccess,
-                    reportedDistance: distance,
-                    reportedLat: userLat,
-                    reportedLon: userLon,
-                    userAgent: navigator.userAgent
-                });
+                await setDoc(logRef, logData);
                 console.log("Individual attendance attempt logged.");
-
             } catch (error) {
-                console.error("Firestore logging error (Individual):", error);
+                console.error("Firestore individual logging error:", error);
             }
 
-            // Log 2: Master log for admin reporting
+            // Log 2: Master log for admin report
             try {
-                const masterLogRef = collection(db, `artifacts/${appId}/public/data/master_log`);
-                await addDoc(masterLogRef, {
-                    userId: currentUserId,
-                    userName: currentUserName || "Not Registered",
-                    class: classData.name,
-                    teacher: classData.teacherName,
-                    course: classData.course,
-                    timestamp: now,
-                    isSuccess: isSuccess,
-                    reportedDistance: distance,
-                    reportedLat: userLat,
-                    reportedLon: userLon,
-                    userAgent: navigator.userAgent
-                });
+                const masterLogPath = `artifacts/${appId}/public/data/master_log`;
+                await addDoc(collection(db, masterLogPath), logData);
                 console.log("Master attendance attempt logged.");
             } catch (error) {
-                console.error("Firestore logging error (Master):", error);
+                console.error("Firestore master logging error:", error);
             }
         }
 
