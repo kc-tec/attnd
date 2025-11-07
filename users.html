@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Report</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Style for table */
+        table thead th { position: sticky; top: 0; background-color: #f3f4f6; z-index: 10; }
+        /* Custom modal styles */
+        .modal { transition: opacity 0.25s ease; }
+        .modal-content { transition: transform 0.25s ease; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Registered User Report</h1>
+
+        <!-- Loading / Auth Section -->
+        <div id="loading-container" class="text-center py-8">
+            <svg class="animate-spin h-8 w-8 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p id="loading-text" class="mt-3 font-medium text-gray-600">Connecting to service...</p>
+        </div>
+
+        <!-- Main Report UI (hidden by default) -->
+        <div id="report-container" class="hidden">
+            <!-- Filters -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <input type="text" id="filter-student-id" placeholder="Filter by Student ID..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="filter-name" placeholder="Filter by Name..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="filter-class" placeholder="Filter by Class..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap gap-3 mb-6">
+                <button id="fetch-reports-btn" class="flex-grow sm:flex-grow-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300">
+                    Fetch All Users
+                </button>
+                <button id="add-user-btn" class="flex-grow sm:flex-grow-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300">
+                    Add New User
+                </button>
+                <button id="download-csv-btn" class="flex-grow sm:flex-grow-0 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
+                    Download as CSV
+                </button>
+                <button id="download-excel-btn" class="flex-grow sm:flex-grow-0 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
+                    Download as Excel
+                </button>
+                <button id="download-pdf-btn" class="flex-grow sm:flex-grow-0 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 hidden">
+                    Download as PDF
+                </button>
+            </div>
+            
+            <p id="report-status" class="text-center text-gray-600 mb-4"></p>
+
+            <!-- Report Table -->
+            <div class="max-h-[600px] overflow-y-auto border border-gray-200 rounded-lg">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Student ID</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Class</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Telephone</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Email</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Registered At</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Rows will be injected here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <p id="no-results" class="text-center text-gray-500 py-8 hidden">No users found.</p>
+
+        </div>
+    </div>
+
+    <!-- User Form Modal (for Add/Edit) -->
+    <div id="user-modal" class="modal fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 opacity-0 pointer-events-none">
+        <div class="modal-content bg-white w-full max-w-lg rounded-2xl shadow-xl p-6 md:p-8 transform -translate-y-10 scale-95">
+            <h2 id="modal-title" class="text-2xl font-bold text-gray-800 mb-6">Add New User</h2>
+            <!-- Hidden field for storing the User ID (document ID) during edits -->
+            <input type="hidden" id="modal-user-id">
+            
+            <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                <div>
+                    <label for="modal-student-id" class="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
+                    <input type="text" id="modal-student-id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., KCP00123">
+                </div>
+                <div>
+                    <label for="modal-student-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input type="text" id="modal-student-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., John Doe">
+                </div>
+                <div>
+                    <label for="modal-student-sex" class="block text-sm font-medium text-gray-700 mb-1">Sex</label>
+                    <select id="modal-student-sex" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">Please select...</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="modal-student-tel" class="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
+                    <input type="tel" id="modal-student-tel" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 012 345 678">
+                </div>
+                <div>
+                    <label for="modal-student-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="modal-student-email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., student.email@example.com">
+                </div>
+                <div>
+                    <label for="modal-student-program" class="block text-sm font-medium text-gray-700 mb-1">Program</label>
+                    <input type="text" id="modal-student-program" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Bachelor of IT">
+                </div>
+                <div>
+                    <label for="modal-student-academic-year" class="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                    <input type="text" id="modal-student-academic-year" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Year 4">
+                </div>
+                <div>
+                    <label for="modal-student-class" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                    <input type="text" id="modal-student-class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., M1">
+                </div>
+            </div>
+            
+            <div id="modal-message" class="text-sm text-center mt-4"></div>
+            
+            <div class="flex items-center justify-end space-x-3 mt-6">
+                <button id="modal-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition duration-300">
+                    Cancel
+                </button>
+                <button id="modal-save-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                    Save User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 opacity-0 pointer-events-none">
+        <div class="modal-content bg-white w-full max-w-sm rounded-2xl shadow-xl p-6 transform -translate-y-10 scale-95">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Confirm Deletion</h2>
+            <p id="delete-modal-text" class="text-gray-600 mb-6">Are you sure you want to delete this user?</p>
+            <input type="hidden" id="delete-modal-user-id">
+            
+            <div class="flex items-center justify-end space-x-3">
+                <button id="delete-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition duration-300">
+                    Cancel
+                </button>
+                <button id="delete-confirm-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK and App Logic -->
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // --- ADDED NEW IMPORTS ---
+        import { 
+            getFirestore, collection, getDocs, query,
+            doc, setDoc, addDoc, updateDoc, deleteDoc, 
+            serverTimestamp, where, getDoc
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBoQStCXGXMe5Bz5hk14cOmynRI3gPGs6o",
+            authDomain: "kcpttc.firebaseapp.com",
+            projectId: "kcpttc",
+            storageBucket: "kcpttc.firebasestorage.app",
+            messagingSenderId: "709003234625",
+            appId: "1:709003234625:web:c9284048369530895065c0",
+            measurementId: "G-P1NN0RSNFW"
+        };
+        
+        const finalFirebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : firebaseConfig;
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-attendance-app';
+
+        // --- Initialize Firebase ---
+        let app, auth, db;
+        let usersCollectionRef; // Store a reference to the users collection
+        
+        try {
+            app = initializeApp(finalFirebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            // Define the path to the users collection
+            const usersPath = `artifacts/${appId}/public/data/users`;
+            usersCollectionRef = collection(db, usersPath);
+        } catch (e) {
+            console.error("Firebase initialization error:", e);
+            document.getElementById("loading-text").textContent = "Error: Could not connect to Firebase.";
+        }
+
+        // --- UI Elements ---
+        const loadingContainer = document.getElementById("loading-container");
+        const loadingText = document.getElementById("loading-text");
+        const reportContainer = document.getElementById("report-container");
+        const fetchBtn = document.getElementById("fetch-reports-btn");
+        const addUserBtn = document.getElementById("add-user-btn");
+        const downloadCsvBtn = document.getElementById("download-csv-btn");
+        const downloadExcelBtn = document.getElementById("download-excel-btn");
+        const downloadPdfBtn = document.getElementById("download-pdf-btn");
+        const tableBody = document.getElementById("report-table-body");
+        const noResults = document.getElementById("no-results");
+        const reportStatus = document.getElementById("report-status");
+
+        const filterStudentId = document.getElementById("filter-student-id");
+        const filterName = document.getElementById("filter-name");
+        const filterClass = document.getElementById("filter-class");
+        
+        // Modal Elements
+        const userModal = document.getElementById("user-modal");
+        const modalTitle = document.getElementById("modal-title");
+        const modalUserId = document.getElementById("modal-user-id");
+        const modalStudentId = document.getElementById("modal-student-id");
+        const modalStudentName = document.getElementById("modal-student-name");
+        const modalStudentSex = document.getElementById("modal-student-sex");
+        const modalStudentTel = document.getElementById("modal-student-tel");
+        const modalStudentEmail = document.getElementById("modal-student-email");
+        const modalStudentProgram = document.getElementById("modal-student-program");
+        const modalStudentAcademicYear = document.getElementById("modal-student-academic-year");
+        const modalStudentClass = document.getElementById("modal-student-class");
+        const modalMessage = document.getElementById("modal-message");
+        const modalCancelBtn = document.getElementById("modal-cancel-btn");
+        const modalSaveBtn = document.getElementById("modal-save-btn");
+
+        // Delete Modal Elements
+        const deleteModal = document.getElementById("delete-modal");
+        const deleteModalText = document.getElementById("delete-modal-text");
+        const deleteModalUserId = document.getElementById("delete-modal-user-id");
+        const deleteCancelBtn = document.getElementById("delete-cancel-btn");
+        const deleteConfirmBtn = document.getElementById("delete-confirm-btn");
+        
+        let allReportData = []; // To store fetched user data
+        let currentAuthUser = null;
+
+        // --- Authentication ---
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                try {
+                    // Try to sign in with token or anonymously, just to get auth
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        const userCred = await signInWithCustomToken(auth, __initial_auth_token);
+                        currentAuthUser = userCred.user;
+                    } else {
+                        const userCred = await signInAnonymously(auth);
+                        currentAuthUser = userCred.user;
+                    }
+                    console.log("Authenticated for reporting:", currentAuthUser.uid);
+                } catch (error) {
+                    console.error("Auth error:", error);
+                    loadingText.textContent = "Authentication failed. You must be signed in to view reports.";
+                    return;
+                }
+            } else {
+                currentAuthUser = user;
+            }
+            
+            // User is authenticated
+            // You should add your Admin UID check here for production
+            loadingContainer.classList.add("hidden");
+            reportContainer.classList.remove("hidden");
+        });
+
+        // --- Event Listeners ---
+        fetchBtn.addEventListener("click", fetchUsers);
+        addUserBtn.addEventListener("click", openAddModal);
+        modalSaveBtn.addEventListener("click", handleSaveUser);
+        modalCancelBtn.addEventListener("click", closeModal);
+        deleteConfirmBtn.addEventListener("click", handleDeleteUser);
+        deleteCancelBtn.addEventListener("click", closeDeleteModal);
+        
+        downloadCsvBtn.addEventListener("click", downloadCSV);
+        downloadExcelBtn.addEventListener("click", downloadExcel);
+        downloadPdfBtn.addEventListener("click", downloadPDF);
+
+        // Add listeners for filters
+        [filterStudentId, filterName, filterClass].forEach(input => {
+            input.addEventListener('input', applyFilters);
+        });
+
+        /**
+         * Fetches all logs from the 'users' collection.
+         */
+        async function fetchUsers() {
+            fetchBtn.disabled = true;
+            fetchBtn.textContent = "Fetching...";
+            reportStatus.textContent = "Loading user data from Firestore...";
+            noResults.classList.add("hidden");
+
+            try {
+                const q = query(usersCollectionRef);
+                const querySnapshot = await getDocs(q);
+                
+                // --- MODIFIED --- Now stores the doc.id as 'id'
+                allReportData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Sort by registration date (newest first)
+                allReportData.sort((a, b) => {
+                    const timeA = a.registeredAt ? a.registeredAt.toMillis() : 0;
+                    const timeB = b.registeredAt ? b.registeredAt.toMillis() : 0;
+                    return timeB - timeA;
+                });
+
+                if (allReportData.length > 0) {
+                    applyFilters(); // Display the data
+                    downloadCsvBtn.classList.remove("hidden");
+                    downloadExcelBtn.classList.remove("hidden");
+                    downloadPdfBtn.classList.remove("hidden");
+                    reportStatus.textContent = `Fetched ${allReportData.length} total users.`;
+                } else {
+                    tableBody.innerHTML = ""; // Clear table
+                    noResults.classList.remove("hidden");
+                    downloadCsvBtn.classList.add("hidden");
+                    downloadExcelBtn.classList.add("hidden");
+                    downloadPdfBtn.classList.add("hidden");
+                    reportStatus.textContent = "No users found.";
+                }
+
+            } catch (error) {
+                console.error("Error fetching users:", error);
+                reportStatus.textContent = `Error fetching users: ${error.message}`;
+            } finally {
+                fetchBtn.disabled = false;
+                fetchBtn.textContent = "Fetch All Users";
+            }
+        }
+
+        /**
+         * Applies the current filters to the 'allReportData' and updates the table.
+         */
+        function applyFilters() {
+            const idFilter = filterStudentId.value.toLowerCase();
+            const nameFilter = filterName.value.toLowerCase();
+            const classFilter = filterClass.value.toLowerCase();
+
+            const filteredData = getFilteredData(idFilter, nameFilter, classFilter);
+            populateTable(filteredData);
+        }
+
+        /**
+         * Populates the HTML table with filtered user data.
+         */
+        function populateTable(data) {
+            if (data.length === 0) {
+                tableBody.innerHTML = "";
+                noResults.classList.remove("hidden");
+                return;
+            }
+
+            noResults.classList.add("hidden");
+            let tableHtml = "";
+
+            data.forEach(user => {
+                const timestamp = user.registeredAt ? user.registeredAt.toDate() : new Date(0);
+                const dateStr = timestamp.toLocaleString('en-US', { 
+                    dateStyle: 'short', 
+                    timeStyle: 'short' 
+                });
+                
+                // Escape user data for security
+                const studentId = escapeHTML(user.studentId || 'N/A');
+                const name = escapeHTML(user.name || 'N/A');
+                const userClass = escapeHTML(user.class || 'N/A');
+                const telephone = escapeHTML(user.telephone || 'N/A');
+                const email = escapeHTML(user.email || 'N/A');
+                
+                tableHtml += `
+                    <tr class="text-sm text-gray-700" data-user-id="${user.id}">
+                        <td class="px-4 py-3 font-medium">${studentId}</td>
+                        <td class="px-4 py-3">${name}</td>
+                        <td class="px-4 py-3">${userClass}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${telephone}</td>
+                        <td class="px-4 py-3">${email}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${dateStr}</td>
+                        <td class="px-4 py-3 whitespace-nowrap space-x-2">
+                            <button class="edit-btn text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                            <button class="delete-btn text-red-600 hover:text-red-800 font-medium">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableBody.innerHTML = tableHtml;
+            
+            // Add event listeners to the new buttons
+            tableBody.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const userId = e.target.closest('tr').dataset.userId;
+                    openEditModal(userId);
+                });
+            });
+            tableBody.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const userId = e.target.closest('tr').dataset.userId;
+                    const userName = e.target.closest('tr').cells[1].textContent;
+                    openDeleteModal(userId, userName);
+                });
+            });
+        }
+        
+        // --- CRUD Modal Functions ---
+
+        function openAddModal() {
+            modalTitle.textContent = "Add New User";
+            modalUserId.value = ""; // No ID for new user
+            clearModalForm();
+            openModal();
+        }
+
+        function openEditModal(userId) {
+            const user = allReportData.find(u => u.id === userId);
+            if (!user) {
+                console.error("Could not find user data for ID:", userId);
+                return;
+            }
+            
+            modalTitle.textContent = "Edit User";
+            modalUserId.value = user.id; // Store the document ID
+            
+            // Populate the form
+            modalStudentId.value = user.studentId || "";
+            modalStudentName.value = user.name || "";
+            modalStudentSex.value = user.sex || "";
+            modalStudentTel.value = user.telephone || "";
+            modalStudentEmail.value = user.email || "";
+            modalStudentProgram.value = user.program || "";
+            modalStudentAcademicYear.value = user.academicYear || "";
+            modalStudentClass.value = user.class || "";
+            
+            openModal();
+        }
+
+        async function handleSaveUser() {
+            const userId = modalUserId.value; // Will be empty for "Add", or have ID for "Edit"
+            
+            // Get data from form
+            const userData = {
+                studentId: modalStudentId.value.trim(),
+                name: modalStudentName.value.trim(),
+                sex: modalStudentSex.value,
+                telephone: modalStudentTel.value.trim(),
+                email: modalStudentEmail.value.trim().toLowerCase(),
+                program: modalStudentProgram.value.trim(),
+                academicYear: modalStudentAcademicYear.value.trim(),
+                class: modalStudentClass.value.trim(),
+            };
+
+            // Validation
+            if (!userData.studentId || !userData.name) {
+                showModalMessage("error", "Student ID and Name are required.");
+                return;
+            }
+            
+            modalSaveBtn.disabled = true;
+            modalSaveBtn.textContent = "Saving...";
+            showModalMessage("info", "Checking for duplicate Student ID...");
+
+            try {
+                // Check for duplicate Student ID
+                const q = query(usersCollectionRef, where("studentId", "==", userData.studentId));
+                const querySnapshot = await getDocs(q);
+                
+                let isDuplicate = false;
+                if (!querySnapshot.empty) {
+                    if (userId) { // This is an Edit
+                        // It's a duplicate *only if* the found ID is different from the one we are editing
+                        isDuplicate = querySnapshot.docs.some(doc => doc.id !== userId);
+                    } else { // This is an Add
+                        isDuplicate = true;
+                    }
+                }
+                
+                if (isDuplicate) {
+                    throw new Error("This Student ID is already registered to another user.");
+                }
+
+                // --- Save the data ---
+                showModalMessage("info", "Saving user data...");
+                
+                if (userId) {
+                    // --- UPDATE existing user ---
+                    // We need to get the specific doc reference
+                    const userDocRef = doc(db, `artifacts/${appId}/public/data/users/${userId}`);
+                    await updateDoc(userDocRef, userData);
+                    console.log("User updated:", userId);
+                } else {
+                    // --- CREATE new user ---
+                    // This user won't have an Auth UID, but will be in the system.
+                    userData.registeredAt = serverTimestamp();
+                    // We must manually add a 'userId' if our rules need it, but
+                    // our duplicate check works on studentId, so this is okay.
+                    // The 'index.html' creates a user with doc.id == auth.uid
+                    // This admin-created user will have doc.id != auth.uid
+                    // We will set the 'userId' field to be the auth UID of the *admin*
+                    userData.userId = currentAuthUser.uid; 
+                    userData.createdBy = "admin";
+
+                    const docRef = await addDoc(usersCollectionRef, userData);
+                    console.log("New user created with ID:", docRef.id);
+                }
+
+                closeModal();
+                await fetchUsers(); // Refresh the user list
+                reportStatus.textContent = "User data saved successfully!";
+                
+            } catch (error) {
+                console.error("Error saving user:", error);
+                showModalMessage("error", error.message);
+            } finally {
+                modalSaveBtn.disabled = false;
+                modalSaveBtn.textContent = "Save User";
+            }
+        }
+        
+        function openDeleteModal(userId, userName) {
+            deleteModalUserId.value = userId;
+            deleteModalText.textContent = `Are you sure you want to delete ${escapeHTML(userName)} (ID: ${escapeHTML(userId)})? This action cannot be undone.`;
+            
+            // Show modal
+            deleteModal.classList.remove("opacity-0", "pointer-events-none");
+            deleteModal.querySelector(".modal-content").classList.remove("-translate-y-10", "scale-95");
+        }
+        
+        async function handleDeleteUser() {
+            const userId = deleteModalUserId.value;
+            if (!userId) return;
+
+            deleteConfirmBtn.disabled = true;
+            deleteConfirmBtn.textContent = "Deleting...";
+
+            try {
+                const userDocRef = doc(db, `artifacts/${appId}/public/data/users/${userId}`);
+                await deleteDoc(userDocRef);
+                
+                console.log("User deleted:", userId);
+                closeDeleteModal();
+                await fetchUsers(); // Refresh the list
+                reportStatus.textContent = `User ${userId} was deleted successfully.`;
+
+            } catch (error) {
+                console.error("Error deleting user:", error);
+                deleteModalText.textContent = `Error: ${error.message}`;
+            } finally {
+                deleteConfirmBtn.disabled = false;
+                deleteConfirmBtn.textContent = "Delete";
+            }
+        }
+
+        function clearModalForm() {
+            modalStudentId.value = "";
+            modalStudentName.value = "";
+            modalStudentSex.value = "";
+            modalStudentTel.value = "";
+            modalStudentEmail.value = "";
+            modalStudentProgram.value = "";
+            modalStudentAcademicYear.value = "";
+            modalStudentClass.value = "";
+            modalMessage.textContent = "";
+        }
+        
+        function openModal() {
+            userModal.classList.remove("opacity-0", "pointer-events-none");
+            userModal.querySelector(".modal-content").classList.remove("-translate-y-10", "scale-95");
+        }
+        
+        function closeModal() {
+            userModal.classList.add("opacity-0", "pointer-events-none");
+            userModal.querySelector(".modal-content").classList.add("-translate-y-10", "scale-95");
+            clearModalForm();
+        }
+        
+        function closeDeleteModal() {
+            deleteModal.classList.add("opacity-0", "pointer-events-none");
+            deleteModal.querySelector(".modal-content").classList.add("-translate-y-10", "scale-95");
+            deleteModalUserId.value = "";
+        }
+        
+        function showModalMessage(type, message) {
+            modalMessage.textContent = message;
+            if (type === "error") {
+                modalMessage.className = "text-sm text-center mt-4 text-red-600";
+            } else if (type === "info") {
+                modalMessage.className = "text-sm text-center mt-4 text-blue-600";
+            } else {
+                modalMessage.className = "text-sm text-center mt-4 text-green-600";
+            }
+        }
+
+        // --- Download/Export Functions ---
+
+        /**
+         * Converts the currently *filtered* data to CSV and triggers a download.
+         */
+        function downloadCSV() {
+            const data = getFilteredData();
+            if (data.length === 0) {
+                alert("No data to download.");
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            
+            // CSV Headers
+            const headers = [
+                "Student ID", "Name", "Sex", "Telephone", "Email", "Program", 
+                "Academic Year", "Class", "Registered At", "User ID (Doc ID)"
+            ];
+            csvContent += headers.join(",") + "\r\n";
+
+            // CSV Rows
+            data.forEach(user => {
+                const timestamp = user.registeredAt ? user.registeredAt.toDate().toISOString() : "";
+                const row = [
+                    `"${user.studentId || ""}"`,
+                    `"${user.name || ""}"`,
+                    `"${user.sex || ""}"`,
+                    `"${user.telephone || ""}"`,
+                    `"${user.email || ""}"`,
+                    `"${user.program || ""}"`,
+                    `"${user.academicYear || ""}"`,
+                    `"${user.class || ""}"`,
+                    timestamp,
+                    `"${user.id || ""}"` // Use the doc ID
+                ];
+                csvContent += row.join(",") + "\r\n";
+            });
+
+            // Create download link
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "user_report.csv");
+            document.body.appendChild(link); // Required for Firefox
+
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        /**
+         * Converts the currently *filtered* data to an Excel (.xlsx) file and triggers a download.
+         */
+        function downloadExcel() {
+            const data = getFilteredData();
+            if (data.length === 0) {
+                alert("No data to download.");
+                return;
+            }
+
+            // 1. Re-format data for the worksheet
+            const worksheetData = data.map(user => ({
+                "Student ID": user.studentId || "",
+                "Name": user.name || "",
+                "Sex": user.sex || "",
+                "Telephone": user.telephone || "",
+                "Email": user.email || "",
+                "Program": user.program || "",
+                "Academic Year": user.academicYear || "",
+                "Class": user.class || "",
+                "Registered At": user.registeredAt ? user.registeredAt.toDate() : "",
+                "User ID (Doc ID)": user.id || "" // Use the doc ID
+            }));
+
+            // 2. Create worksheet and workbook
+            const ws = XLSX.utils.json_to_sheet(worksheetData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "User Report");
+
+            // 3. Auto-size columns
+            const cols = Object.keys(worksheetData[0]).map(key => ({
+                wch: Math.max(key.length, ...worksheetData.map(row => String(row[key]).length))
+            }));
+            ws["!cols"] = cols;
+
+            // 4. Trigger download
+            XLSX.writeFile(wb, "user_report.xlsx");
+        }
+
+        /**
+         * Converts the currently *filtered* data to a PDF file and triggers a download.
+         */
+        function downloadPDF() {
+            const data = getFilteredData();
+            if (data.length === 0) {
+                alert("No data to download.");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'landscape',
+                unit: 'pt',
+                format: 'a4'
+            });
+
+            // Define Columns and Rows for autoTable
+            const head = [['Student ID', 'Name', 'Class', 'Telephone', 'Email', 'Program', 'Year', 'Registered At']];
+            const body = data.map(user => [
+                user.studentId || '',
+                user.name || '',
+                user.class || '',
+                user.telephone || '',
+                user.email || '',
+                user.program || '',
+                user.academicYear || '',
+                user.registeredAt ? user.registeredAt.toDate().toLocaleString('en-US') : ''
+            ]);
+
+            // Generate the table
+            doc.autoTable({
+                head: head,
+                body: body,
+                startY: 50,
+                styles: { fontSize: 7, cellPadding: 2 }, // Smaller font for more columns
+                headStyles: { fillColor: [37, 99, 235] } // Blue header
+            });
+
+            // Add a title
+            doc.setFontSize(18);
+            doc.text("Registered User Report", 40, 35);
+
+            // Trigger download
+            doc.save('user_report.pdf');
+        }
+
+        /**
+         * Helper function to get the currently filtered data based on all filters.
+         */
+        function getFilteredData(
+            idFilter = filterStudentId.value.toLowerCase(),
+            nameFilter = filterName.value.toLowerCase(),
+            classFilter = filterClass.value.toLowerCase()
+        ) {
+            return allReportData.filter(user => {
+                const logId = (user.studentId || "").toLowerCase();
+                const logName = (user.name || "").toLowerCase();
+                const logClass = (user.class || "").toLowerCase();
+
+                return logId.includes(idFilter) &&
+                       logName.includes(nameFilter) &&
+                       logClass.includes(classFilter);
+            });
+        }
+        
+        /**
+         * Simple HTML escaper to prevent XSS
+         */
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.toString()
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+    </script>
+</body>
+</html>
