@@ -52,12 +52,12 @@
             <div class="space-y-4">
                 <div>
                     <label for="student-id" class="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-                    <input type="text" id="student-id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., KCP00123">
+                    <input type="text" id="student-id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 8031">
                 </div>
 
                 <div>
                     <label for="student-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                    <input type="text" id="student-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., John Doe">
+                    <input type="text" id="student-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Chenda Nary">
                 </div>
 
                 <div>
@@ -81,7 +81,7 @@
 
                 <div>
                     <label for="student-program" class="block text-sm font-medium text-gray-700 mb-1">Program</label>
-                    <input type="text" id="student-program" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Bachelor of IT">
+                    <input type="text" id="student-program" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 12+2">
                 </div>
 
                 <div>
@@ -91,7 +91,7 @@
 
                 <div>
                     <label for="student-class" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                    <input type="text" id="student-class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., M1">
+                    <input type="text" id="student-class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., A1">
                 </div>
             </div>
             
@@ -169,7 +169,6 @@
         // --- Initialize Firebase ---
         let app, auth, db, currentUserId, currentUserName;
         let usersCollectionRef; // Reference to 'users' collection
-        
         try {
             app = initializeApp(finalFirebaseConfig);
             auth = getAuth(app);
@@ -229,17 +228,17 @@
             currentUserId = authUser.uid;
             console.log("User authenticated:", currentUserId);
 
-            // --- Original Flow: Check registration ---
+            // --- Original Flow: Proceed to registration check ---
             await proceedToRegistrationCheck();
         });
 
-        
+
         /**
          * Checks Firestore for user registration.
          */
         async function proceedToRegistrationCheck() {
-            // This doc ref path is special: the doc ID *is* the user's UID
-            const userDocRef = doc(db, `artifacts/${appId}/public/data/users/${currentUserId}`);
+            // We use the collection ref now
+            const userDocRef = doc(usersCollectionRef, currentUserId);
             
             try {
                 const userDoc = await getDoc(userDocRef);
@@ -259,6 +258,7 @@
                 }
             } catch (error) {
                 console.error("Error checking user registration:", error);
+                loadingContainer.classList.remove("hidden"); // Show loading container again
                 loadingContainer.innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Could not check user status. Please refresh.</div>`;
             }
         }
@@ -283,8 +283,10 @@
             }
 
             registerBtn.disabled = true;
-            registerBtn.textContent = "Checking Student ID...";
-            registerMessage.textContent = "";
+            registerBtn.textContent = "Registering...";
+            registerMessage.textContent = "Checking Student ID...";
+            registerMessage.className = "text-sm text-center mt-3 text-blue-600";
+
 
             try {
                 // --- NEW: Check for duplicate Student ID ---
@@ -295,15 +297,14 @@
                     // A document with this student ID already exists
                     throw new Error("This Student ID is already registered.");
                 }
+                // --- End duplicate check ---
+
+                registerMessage.textContent = "Registering...";
                 
-                // --- No duplicate found, proceed with registration ---
-                registerBtn.textContent = "Registering...";
-                
-                // Save all fields to Firestore
-                // We use the auth UID as the document ID
-                const userDocPath = `artifacts/${appId}/public/data/users/${currentUserId}`;
-                await setDoc(doc(db, userDocPath), {
-                    userId: currentUserId, // This is the auth UID
+                // Save all fields to Firestore, using the Auth UID as the document ID
+                const userDocRef = doc(usersCollectionRef, currentUserId);
+                await setDoc(userDocRef, {
+                    userId: currentUserId, // Store the UID in the doc as well
                     studentId: studentId,
                     name: name,
                     sex: sex,
@@ -359,73 +360,70 @@
 
             // --- "Start Scan" Button Click ---
             startScanBtn.addEventListener("click", () => {
-                qrReaderDiv.classList.remove("hidden");
-                startScanBtn.classList.add("hidden");
-                stopScanBtn.classList.remove("hidden");
-                finalMessageDiv.classList.add("hidden"); 
-                linkContainer.classList.add("hidden"); // Hide previous success message
+                // Check for camera permission *just in time*
+                requestCameraPermission().then(() => {
+                    qrReaderDiv.classList.remove("hidden");
+                    startScanBtn.classList.add("hidden");
+                    stopScanBtn.classList.remove("hidden");
+                    finalMessageDiv.classList.add("hidden"); 
+                    linkContainer.classList.add("hidden"); // Hide previous success message
 
-                // Request camera permission *just in time*
-                const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+                    const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
-                Html5Qrcode.getCameras().then(cameras => {
-                    let cameraId;
-                    if (cameras && cameras.length) {
-                        const backCamera = cameras.find(camera => 
-                            (camera.label && camera.label.toLowerCase().includes('back')) || 
-                            (camera.label && camera.label.toLowerCase().includes('environment'))
-                        );
-                        
-                        if (backCamera) {
-                            cameraId = backCamera.id;
-                            console.log("Using back camera:", backCamera.label);
-                        } else {
-                            cameraId = cameras[0].id;
-                            console.log("No back camera found, using default:", cameras[0].label);
-                        }
-                    } else {
-                        console.warn("No cameras enumerated. Using default facingMode.");
-                        cameraId = { facingMode: "environment" };
-                    }
-
-                    html5QrCode.start(
-                        cameraId,
-                        config,
-                        onScanSuccess, 
-                        onScanError    
-                    ).catch((err) => {
-                        console.error("Camera start error (attempt 1):", err);
-                        // Fallback to default environment camera
-                        html5QrCode.start(
-                            { facingMode: "environment" }, config, onScanSuccess, onScanError
-                        ).catch((fallbackErr) => {
-                            console.error("Fallback camera start error (attempt 2):", fallbackErr);
-                            let msg = "Failed to start camera.";
-                            if (fallbackErr.name === "NotAllowedError" || fallbackErr.name === "PermissionDeniedError") {
-                                msg = "Camera access denied. Please grant permission and try again.";
+                    Html5Qrcode.getCameras().then(cameras => {
+                        let cameraId;
+                        if (cameras && cameras.length) {
+                            const backCamera = cameras.find(camera => 
+                                (camera.label && camera.label.toLowerCase().includes('back')) || 
+                                (camera.label && camera.label.toLowerCase().includes('environment'))
+                            );
+                            
+                            if (backCamera) {
+                                cameraId = backCamera.id;
+                                console.log("Using back camera:", backCamera.label);
+                            } else {
+                                cameraId = cameras[0].id;
+                                console.log("No back camera found, using default:", cameras[0].label);
                             }
-                            showMessage("error", msg);
+                        } else {
+                            console.warn("No cameras enumerated. Using default facingMode.");
+                            cameraId = { facingMode: "environment" };
+                        }
+
+                        html5QrCode.start(
+                            cameraId,
+                            config,
+                            onScanSuccess, 
+                            onScanError    
+                        ).catch((err) => {
+                            console.error("Camera start error (attempt 1):", err);
+                            // Fallback for devices that don't like specific IDs
+                            html5QrCode.start(
+                                { facingMode: "environment" }, config, onScanSuccess, onScanError
+                            ).catch((fallbackErr) => {
+                                console.error("Fallback camera start error (attempt 2):", fallbackErr);
+                                showMessage("error", "Failed to start camera. Please grant permissions.");
+                                stopScanning(); 
+                            });
+                        });
+
+                    }).catch(err => {
+                        console.error("Camera access error (getCameras):", err);
+                        // Fallback if getCameras fails
+                        html5QrCode.start(
+                            { facingMode: "environment" }, 
+                            config,
+                            onScanSuccess, 
+                            onScanError    
+                        ).catch((startErr) => {
+                            console.error("Fallback camera start error (attempt 3):", startErr);
+                            showMessage("error", "Failed to start camera. Please grant permissions.");
                             stopScanning(); 
                         });
                     });
-
                 }).catch(err => {
-                    console.error("Camera access error (getCameras):", err);
-                    // Fallback if getCameras fails (e.g., due to permissions)
-                    html5QrCode.start(
-                        { facingMode: "environment" }, 
-                        config,
-                        onScanSuccess, 
-                        onScanError    
-                    ).catch((startErr) => {
-                        console.error("Fallback camera start error (attempt 3):", startErr);
-                        let msg = "Failed to start camera. Please grant permissions.";
-                        if (startErr.name === "NotAllowedError" || startErr.name === "PermissionDeniedError") {
-                            msg = "Camera access denied. Please grant permission and try again.";
-                        }
-                        showMessage("error", msg);
-                        stopScanning(); 
-                    });
+                    // Camera permission was denied by the user
+                    showMessage("error", err.message);
                 });
             });
 
@@ -433,6 +431,28 @@
             stopScanBtn.addEventListener("click", () => {
                 stopScanning();
             });
+        }
+
+        /**
+         * Wraps Camera request in a Promise. (Used for JIT permission)
+         */
+        async function requestCameraPermission() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("Camera access (getUserMedia) is not supported by your browser.");
+            }
+            try {
+                // Request video stream
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Stop all tracks immediately, we only needed the permission.
+                stream.getTracks().forEach(track => track.stop());
+                return; // Success
+            } catch (err) {
+                console.error("getUserMedia error:", err);
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    throw new Error("Camera access denied. Please enable it in your browser settings to continue.");
+                }
+                throw new Error("Could not access camera. Please try again.");
+            }
         }
 
         /**
@@ -457,16 +477,13 @@
             document.getElementById("stop-scan-btn").classList.add("hidden");
         }
 
-        /**
-         * QR Scan Success Callback
-         */
+        // *** MODIFIED FUNCTION ***
         function onScanSuccess(decodedText, decodedResult) {
             stopScanning();
             console.log(`Scan result: ${decodedText}`);
 
             try {
-                // Parse the new 6-part data:
-                // "Class|Teacher_Name|Course|11.551464|104.928236|50"
+                // Parse the new data: "Class|Teacher_Name|Course|11.551464|104.928236|50"
                 const parts = decodedText.split('|');
                 if (parts.length !== 6) throw new Error("Invalid QR code format. Expected 6 parts.");
 
@@ -474,8 +491,8 @@
                     name: parts[0],
                     teacherName: parts[1],
                     course: parts[2], // <-- Added new field
-                    lat: parseFloat(parts[3]),
-                    lon: parseFloat(parts[4]),
+                    lat: parseFloat(parts[3]), 
+                    lon: parseFloat(parts[4]), 
                     radius: parseFloat(parts[5])
                 };
 
@@ -567,122 +584,122 @@
         function checkLocationAndMarkAttendance() {
             if (!classData) return;
             
-            if (!navigator.geolocation) {
-                showMessage("error", "Geolocation is not supported by your browser. Please enable it.");
-                return;
-            }
-            
             showMessage("info", "Checking your location...");
 
             // Request location permission *just in time*
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    // Location Success
-                    const userLat = position.coords.latitude;
-                    const userLon = position.coords.longitude;
-                    const userAccuracy = position.coords.accuracy;
+            requestLocationPermission().then(position => {
+                // Location Success
+                const userLat = position.coords.latitude;
+                const userLon = position.coords.longitude;
+                const userAccuracy = position.coords.accuracy;
 
-                    console.log(`User Location: ${userLat}, ${userLon} (Accuracy: ${userAccuracy}m)`);
-                    
-                    const distance = haversineDistance(
-                        classData.lat, classData.lon,
-                        userLat, userLon
-                    );
+                console.log(`User Location: ${userLat}, ${userLon} (Accuracy: ${userAccuracy}m)`);
+                
+                const distance = haversineDistance(
+                    classData.lat, classData.lon,
+                    userLat, userLon
+                );
 
-                    console.log(`Distance to class: ${distance.toFixed(2)} meters`);
-                    
-                    if (distance <= classData.radius) {
-                        // USER IS IN RANGE
-                        showMessage("success", `Success! You are ${distance.toFixed(0)}m from class (within the ${classData.radius}m range).`);
-                        linkContainer.classList.remove("hidden"); // Show the new success message
-                        logAttendanceAttempt(true, distance, userLat, userLon);
-                    } else {
-                        // USER IS OUT OF RANGE
-                        showMessage("error", `Access Denied. You are ${distance.toFixed(0)}m from class. You must be within ${classData.radius}m.`);
-                        linkContainer.classList.add("hidden");
-                        logAttendanceAttempt(false, distance, userLat, userLon);
-                    }
-                },
-                (error) => {
-                    // Location Error
-                    let msg = "Could not get location. ";
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            msg = "Location access was denied. Please re-enable it in your browser settings.";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            msg = "Location information is unavailable. Please check your device's GPS.";
-                            break;
-                        case error.TIMEOUT:
-                            msg = "The request to get location timed out. Please try again.";
-                            break;
-                        default:
-                            msg = "An unknown error occurred.";
-                            break;
-                    }
-                    showMessage("error", msg);
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000, 
-                    maximumAge: 0 
+                console.log(`Distance to class: ${distance.toFixed(2)} meters`);
+                
+                if (distance <= classData.radius) {
+                    // USER IS IN RANGE
+                    showMessage("success", `Success! You are ${distance.toFixed(0)}m from class (within the ${classData.radius}m range).`);
+                    linkContainer.classList.remove("hidden"); // Show the new success message
+                    logAttendanceAttempt(true, distance, userLat, userLon);
+                } else {
+                    // USER IS OUT OF RANGE
+                    showMessage("error", `Access Denied. You are ${distance.toFixed(0)}m from class. You must be within ${classData.radius}m.`);
+                    linkContainer.classList.add("hidden");
+                    logAttendanceAttempt(false, distance, userLat, userLon);
                 }
-            );
+            }).catch(error => {
+                // Location Error
+                showMessage("error", error.message);
+            });
+        }
+
+        /**
+         * Wraps Geolocation request in a Promise. (Used for JIT permission)
+         */
+        function requestLocationPermission() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("Geolocation is not supported by your browser."));
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (position) => { resolve(position); }, // Success
+                    (error) => { // Error
+                        let msg = "Could not get location. ";
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                msg = "Location access denied. Please enable it in your browser settings to continue.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                msg = "Location information is unavailable. Please try again.";
+                                break;
+                            case error.TIMEOUT:
+                                msg = "The request to get location timed out. Please try again.";
+                                break;
+                            default:
+                                msg = "An unknown location error occurred. Please try again.";
+                                break;
+                        }
+                        reject(new Error(msg));
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            });
         }
 
         // --- 4. Firebase Logging ---
+        // *** MODIFIED FUNCTION ***
         async function logAttendanceAttempt(isSuccess, distance, userLat, userLon) {
+            // --- NEW: Check for success before logging ---
+            if (!isSuccess) {
+                console.log("Attempt was not successful. Skipping log.");
+                return;
+            }
+            // --- END NEW CHECK ---
+
             if (!currentUserId || !classData) {
                 console.warn("Missing user ID or class data. Skipping log.");
                 return;
             }
-            
-            const now = serverTimestamp(); // Use the same timestamp for both logs
 
-            // Log 1: Individual log for 1-hour check
+            // Create the data object
+            const logData = {
+                userId: currentUserId,
+                userName: currentUserName || "Not Registered",
+                class: classData.name,
+                teacher: classData.teacherName, 
+                course: classData.course, // <-- ADDED THIS LINE
+                timestamp: serverTimestamp(),
+                isSuccess: isSuccess,
+                reportedDistance: distance,
+                reportedLat: userLat,
+                reportedLon: userLon,
+                userAgent: navigator.userAgent
+            };
+
             try {
+                // --- Log 1: Individual student log (for 1-hour check) ---
                 const attemptId = `attempt_${Date.now()}`;
                 const logPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts/${attemptId}`;
                 const logRef = doc(db, logPath);
-                
-                await setDoc(logRef, {
-                    userId: currentUserId,
-                    userName: currentUserName || "Not Registered",
-                    class: classData.name,
-                    teacher: classData.teacherName,
-                    course: classData.course,
-                    timestamp: now,
-                    isSuccess: isSuccess,
-                    reportedDistance: distance,
-                    reportedLat: userLat,
-                    reportedLon: userLon,
-                    userAgent: navigator.userAgent
-                });
+                await setDoc(logRef, logData);
                 console.log("Individual attendance attempt logged.");
 
-            } catch (error) {
-                console.error("Firestore logging error (Individual):", error);
-            }
-
-            // Log 2: Master log for admin reporting
-            try {
+                // --- Log 2: Master log (for reporting) ---
                 const masterLogRef = collection(db, `artifacts/${appId}/public/data/master_log`);
-                await addDoc(masterLogRef, {
-                    userId: currentUserId,
-                    userName: currentUserName || "Not Registered",
-                    class: classData.name,
-                    teacher: classData.teacherName,
-                    course: classData.course,
-                    timestamp: now,
-                    isSuccess: isSuccess,
-                    reportedDistance: distance,
-                    reportedLat: userLat,
-                    reportedLon: userLon,
-                    userAgent: navigator.userAgent
-                });
+                await addDoc(masterLogRef, logData);
                 console.log("Master attendance attempt logged.");
+
             } catch (error) {
-                console.error("Firestore logging error (Master):", error);
+                console.error("Firestore logging error:", error);
+                // Show error to user
+                showMessage("error", "Error: Could not save attendance. Check console.");
             }
         }
 
