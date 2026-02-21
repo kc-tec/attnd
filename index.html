@@ -3,751 +3,535 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Class Attendance Scanner</title>
-    <!-- 1. Tailwind CSS -->
+    <title>KC-TEC Check-In (Session Sync)</title>
+    
+    <link rel="icon" type="image/png" href="./fav.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./fav.png">
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 2. QR Scanner Library -->
-    <script src="https://unpkg.com/html5-qrcode@2.0.9/dist/html5-qrcode.min.js"></script>
     <style>
-        /* Updated styles for the QR reader video feed */
-        #qr-reader {
-            width: 100%;
-            max-width: 500px;
-            margin: 0 auto;
-            border: 2px dashed #cbd5e1;
-            border-radius: 8px;
-            overflow: hidden; /* To keep video feed inside borders */
-        }
-        /* Hide the default "Scan an image file" text from the library */
-        #qr-reader a {
-            display: none !important;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        #reader { width: 100%; max-width: 400px; margin: 20px auto; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); }
+        .modal { transition: opacity 0.3s ease-in-out; }
+        .hidden-section { display: none; }
+        button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: 0.5; }
+        
+        /* Progress Bar Styles */
+        .progress-segment { height: 24px; border-radius: 12px; position: relative; transition: all 0.3s ease; border: 1px solid rgba(0,0,0,0.05); }
+        .progress-segment.done { display: flex; align-items: center; justify-content: center; color: white; border: none; }
+        .progress-bg { background-color: #e5e7eb; }
+        
+        /* Colors */
+        .color-am-in { background-color: #f59e0b !important; }  /* Orange */
+        .color-am-out { background-color: #3b82f6 !important; } /* Blue */
+        .color-pm-in { background-color: #a855f7 !important; }  /* Purple */
+        .color-pm-out { background-color: #6366f1 !important; } /* Indigo */
     </style>
+    
+    <script src="./html5-qrcode.min.js" onerror="loadCDN()"></script>
+    <script id="qr-cdn"></script>
+    <script>
+        function loadCDN() {
+            console.warn("Local QR library not found. Falling back to CDN.");
+            const script = document.createElement('script');
+            script.src = "https://unpkg.com/html5-qrcode";
+            document.head.appendChild(script);
+        }
+    </script>
 </head>
-<body class="bg-gray-100 font-sans min-h-screen flex items-center justify-center p-4">
+<body class="p-4 md:p-8 min-h-screen">
 
-    <!-- Card container -->
-    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
-        <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">Class Attendance Scanner</h1>
-
-        <!-- Welcome message (shown after registration) -->
-        <div id="welcome-message" class="hidden text-center text-gray-600 mb-4"></div>
-
-        <!-- Loading Spinner (shown on load) -->
-        <div id="loading-container" class="text-center py-8">
-            <svg class="animate-spin h-8 w-8 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    <!-- === BROWSER RESTRICTION OVERLAY === -->
+    <div id="browser-lock" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-6 text-center hidden">
+        <div class="bg-red-50 p-6 rounded-full mb-6">
+            <svg class="w-16 h-16 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            <p class="mt-3 font-medium text-gray-600">Connecting to service...</p>
         </div>
-
-        <!-- Registration Container (hidden by default) -->
-        <div id="registration-container" class="hidden">
-            <h2 class="text-lg font-semibold text-center text-gray-700 mb-3">Register Your Profile</h2>
-            <p class="text-sm text-gray-600 mb-4">Please register your student profile. This is a one-time step. Your User ID is:</p>
-            <code id="user-uid-display" class="block w-full text-center bg-gray-100 text-gray-800 p-3 rounded-lg text-xs break-all mb-4"></code>
-            
-            <!-- New Registration Form -->
-            <div class="space-y-4">
-                <div>
-                    <label for="student-id" class="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-                    <input type="text" id="student-id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 8031">
-                </div>
-
-                <div>
-                    <label for="student-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                    <input type="text" id="student-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Chenda Nary">
-                </div>
-
-                <div>
-                    <label for="student-sex" class="block text-sm font-medium text-gray-700 mb-1">Sex</label>
-                    <select id="student-sex" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                        <option value="">Please select...</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label for="student-tel" class="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
-                    <input type="tel" id="student-tel" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 012 345 678">
-                </div>
-
-                <div>
-                    <label for="student-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input type="email" id="student-email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., student.email@example.com">
-                </div>
-
-                <div>
-                    <label for="student-program" class="block text-sm font-medium text-gray-700 mb-1">Program</label>
-                    <input type="text" id="student-program" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 12+2">
-                </div>
-
-                <div>
-                    <label for="student-academic-year" class="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
-                    <input type="text" id="student-academic-year" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Year 4">
-                </div>
-
-                <div>
-                    <label for="student-class" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                    <input type="text" id="student-class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., A1">
-                </div>
-            </div>
-            
-            <button id="register-btn" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
-                Register
-            </button>
-            <div id="register-message" class="text-sm text-center mt-3"></div>
-        </div>
-
-        <!-- Scanner Container (hidden by default) -->
-        <div id="scanner-container" class="hidden">
-            <!-- QR Code Scanner video feed will be rendered here -->
-            <div id="qr-reader" class="rounded-lg overflow-hidden hidden"></div>
-
-            <!-- Status & Result Area -->
-            <div id="result-container" class="mt-6 text-center">
-                
-                <!-- New buttons container -->
-                <div id="scan-controls" class="mt-4 space-y-3">
-                    <button id="start-scan-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
-                        Start Camera Scan
-                    </button>
-                                        
-                    <button id="stop-scan-btn" class="hidden w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
-                        Stop Camera
-                    </button>
-                </div>
-
-                <!-- Final Result: Success or Error -->
-                <div id="final-message" class="hidden mt-4"></div>
-
-                <!-- *** LINK REMOVED *** -->
-                <!-- This container now only shows a success message, not a link. -->
-                <div id="attendance-link-container" class="hidden mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <h4 class="font-semibold text-green-800">Access Granted!</h4>
-                    <p class="text-sm text-gray-700">
-                        Your successful check-in has been logged.
-                    </p>
-                </div>
-                <!-- *** END OF CHANGE *** -->
-
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">Unsupported Browser</h1>
+        <p class="text-gray-600 mb-8 max-w-xs">For security and GPS accuracy, please open this link in <b>Google Chrome</b> or <b>Safari</b>.</p>
+        <div class="flex flex-col space-y-3 w-full max-w-xs">
+            <div class="p-3 bg-gray-50 rounded-lg text-sm text-gray-500 border border-gray-200">
+                1. Copy the URL of this page.<br>
+                2. Open Chrome or Safari.<br>
+                3. Paste the URL and login.
             </div>
         </div>
-
     </div>
 
-    <!-- 3. Firebase SDK and App Logic -->
-    <script type="module">
-        // --- Firebase Imports ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // *** IMPORTS UPDATED ***
-        import { 
-            getFirestore, doc, setDoc, getDoc, serverTimestamp, 
-            collection, query, where, getDocs, Timestamp, addDoc 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- === AUTH SECTION === -->
+    <div id="auth-section" class="max-w-md mx-auto bg-white p-8 rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-bold text-center text-indigo-700 mb-2">User Access</h1>
+        <p class="text-center text-xs text-gray-500 mb-6 font-medium uppercase tracking-wider">Device Verification Active</p>
+        
+        <div id="login-form">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700">Full Name</label>
+                <input type="text" id="auth-name" class="mt-1 w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500" placeholder="e.g. San Dara">
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700">ID Number</label>
+                <input type="text" 
+                       id="auth-id" 
+                       inputmode="numeric"
+                       oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                       class="mt-1 w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500" 
+                       placeholder="e.g. 1234">
+                <p class="text-[10px] text-gray-400 mt-1">* Digits only. This ID will be locked to this device.</p>
+            </div>
+            <button onclick="handleAuth()" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition">
+                VERIFY & CONTINUE
+            </button>
+        </div>
+    </div>
 
-        // --- Firebase Configuration ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyBoQStCXGXMe5Bz5hk14cOmynRI3gPGs6o",
-            authDomain: "kcpttc.firebaseapp.com",
-            projectId: "kcpttc",
-            storageBucket: "kcpttc.firebasestorage.app",
-            messagingSenderId: "709003234625",
-            appId: "1:709003234625:web:c9284048369530895065c0",
-            measurementId: "G-P1NN0RSNFW"
+    <!-- === MAIN APP SECTION === -->
+    <div id="app-section" class="max-w-xl mx-auto bg-white p-6 rounded-xl shadow-2xl hidden-section">
+        
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-xl font-extrabold text-indigo-700">KC-TEC Check-In</h1>
+            <button onclick="requestReset()" class="text-[10px] text-gray-400 border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Admin Reset</button>
+        </div>
+
+        <!-- User Info Bar -->
+        <div class="text-xs text-center mb-4 bg-gray-50 py-2 rounded border border-gray-100">
+            <span class="text-gray-400 uppercase text-[9px] block tracking-widest">Verified User</span>
+            <span id="display-user-name" class="font-bold text-indigo-900">...</span> 
+            (<span id="display-user-id" class="text-gray-500 italic">...</span>)
+        </div>
+
+        <!-- Progress Card -->
+        <div class="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center text-indigo-600 font-bold text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    <span id="current-date-display">...</span>
+                </div>
+                <div class="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full" id="progress-fraction">0/4</div>
+            </div>
+
+            <!-- Visual Bar -->
+            <div class="grid grid-cols-4 gap-1.5 mb-3">
+                <div id="bar-AM-IN" class="progress-segment progress-bg"></div>
+                <div id="bar-AM-OUT" class="progress-segment progress-bg"></div>
+                <div id="bar-PM-IN" class="progress-segment progress-bg"></div>
+                <div id="bar-PM-OUT" class="progress-segment progress-bg"></div>
+            </div>
+
+            <!-- Labels and Times -->
+            <div class="grid grid-cols-4 text-center">
+                <div class="flex flex-col items-center">
+                    <span class="text-[9px] font-bold text-gray-600 uppercase">AM In</span>
+                    <span id="time-AM-IN" class="text-[9px] text-orange-500 font-mono mt-0.5 whitespace-nowrap">--:-- --</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-[9px] font-bold text-gray-600 uppercase">AM Out</span>
+                    <span id="time-AM-OUT" class="text-[9px] text-blue-500 font-mono mt-0.5 whitespace-nowrap">--:-- --</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-[9px] font-bold text-gray-600 uppercase">PM In</span>
+                    <span id="time-PM-IN" class="text-[9px] text-purple-500 font-mono mt-0.5 whitespace-nowrap">--:-- --</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-[9px] font-bold text-gray-600 uppercase">PM Out</span>
+                    <span id="time-PM-OUT" class="text-[9px] text-indigo-700 font-mono mt-0.5 whitespace-nowrap">--:-- --</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scanner Controls Area -->
+        <div id="scanner-wrapper">
+            <div id="reader-container" class="relative bg-gray-100 p-2 rounded-lg overflow-hidden">
+                <div id="reader"></div>
+                <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-gray-100/90 hidden z-10">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+                    <p class="ml-4 text-indigo-700 font-semibold text-sm">Syncing...</p>
+                </div>
+            </div>
+
+            <div id="result-status" class="mt-4 p-3 rounded-lg bg-gray-50 border border-gray-200 text-center">
+                <p id="status-message" class="text-sm font-medium text-gray-600">Please select a session below.</p>
+            </div>
+
+            <div id="controls-wrapper" class="mt-6">
+                <div id="main-controls" class="grid grid-cols-2 gap-3">
+                    <button id="am-in-btn" onclick="initiateScan('AM-IN')" class="px-4 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 transition flex flex-col items-center">
+                        <span class="text-[10px] uppercase opacity-80">Morning</span>
+                        <span>AM In</span>
+                    </button>
+                    <button id="am-out-btn" onclick="initiateScan('AM-OUT')" class="px-4 py-3 bg-orange-500 text-white font-bold rounded-lg shadow-md hover:bg-orange-600 transition flex flex-col items-center">
+                        <span class="text-[10px] uppercase opacity-80">Morning</span>
+                        <span>AM Out</span>
+                    </button>
+                    <button id="pm-in-btn" onclick="initiateScan('PM-IN')" class="px-4 py-3 bg-indigo-800 text-white font-bold rounded-lg shadow-md hover:bg-indigo-900 transition flex flex-col items-center">
+                        <span class="text-[10px] uppercase opacity-80">Afternoon</span>
+                        <span>PM In</span>
+                    </button>
+                    <button id="pm-out-btn" onclick="initiateScan('PM-OUT')" class="px-4 py-3 bg-orange-700 text-white font-bold rounded-lg shadow-md hover:bg-orange-800 transition flex flex-col items-center">
+                        <span class="text-[10px] uppercase opacity-80">Afternoon</span>
+                        <span>PM Out</span>
+                    </button>
+                </div>
+                <div class="mt-6 flex flex-col space-y-2">
+                    <button onclick="openLeaveModal()" id="leave-toggle-btn" class="w-full py-2 bg-gray-100 text-indigo-700 font-semibold rounded-lg hover:bg-gray-200 transition text-xs">Request Leave</button>
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="viewQR()" class="py-2 bg-indigo-50 text-indigo-700 font-bold rounded-lg border border-indigo-200 hover:bg-indigo-100 transition text-xs flex items-center justify-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View QR
+                        </button>
+                        <button id="skip-scan-btn" onclick="confirmSkip()" class="py-2 bg-red-50 text-red-600 font-bold rounded-lg border border-red-200 hover:bg-red-100 transition text-xs flex items-center justify-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                            Skip Scan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="cancel-control" class="mt-6 hidden-section">
+            <button onclick="stopScan()" class="w-full px-4 py-3 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition">Cancel / Stop Scanner</button>
+        </div>
+    </div>
+
+    <!-- Modal System -->
+    <div id="custom-modal" class="modal fixed inset-0 bg-gray-900/75 flex items-center justify-center p-4 z-50 pointer-events-none opacity-0">
+        <div class="bg-white rounded-xl p-6 shadow-2xl w-full max-w-sm transform transition-all scale-95">
+            <h3 id="modal-title" class="text-xl font-bold mb-3 text-gray-800">Notification</h3>
+            <p id="modal-message" class="text-gray-600 mb-4 text-sm"></p>
+            
+            <!-- View QR Image Container -->
+            <div id="modal-image-container" class="hidden mb-4 overflow-hidden rounded-lg text-center">
+                <img id="modal-qr-img" src="qrcode.jpg" class="w-full h-auto mx-auto" alt="QR Code" onerror="this.src='https://placehold.co/400x400?text=QR+Image+Missing'">
+            </div>
+
+            <!-- PIN Input Container -->
+            <div id="modal-input-container" class="hidden mb-4">
+                <input type="password" id="modal-input" class="w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500" placeholder="Enter PIN">
+            </div>
+
+            <!-- Leave Form Container -->
+            <div id="modal-leave-container" class="hidden mb-4 text-left">
+                <form id="leave-form">
+                    <div class="mb-3">
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Category</label>
+                        <select id="leave-type" name="type" required class="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm">
+                            <option value="Annual">Annual Leave</option>
+                            <option value="Sick">Sick Leave</option>
+                            <option value="Emergency">Emergency / Unpaid</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Start</label>
+                            <input type="date" id="leave-start-date" required class="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">End</label>
+                            <input type="date" id="leave-end-date" required class="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Reason / Note</label>
+                        <textarea id="leave-reason" rows="3" required class="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm" placeholder="Please provide details..."></textarea>
+                    </div>
+                </form>
+            </div>
+
+            <div class="flex space-x-2">
+                <button id="modal-cancel-btn" onclick="closeModal()" class="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hidden text-sm">Cancel</button>
+                <button id="modal-confirm-btn" onclick="closeModal()" class="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- UPDATED CONFIG: Replace with your api.php link ---
+        const API_URL = "api.php"; 
+        const ADMIN_RESET_PIN = "2520";
+        const SYNC_TIMEOUT_MS = 12000;
+
+        let currentUser = null;
+        let qrScanner = null;
+        let scanning = false;
+        let currentAction = 'AM-IN';
+
+        const getLocalDate = () => new Date().toLocaleDateString('en-CA'); 
+
+        const checkBrowser = () => {
+            const ua = navigator.userAgent;
+            const isChrome = /Chrome/.test(ua) || /CriOS/.test(ua);
+            const isSafari = /Safari/.test(ua) && !isChrome;
+            const isEdge = /Edg/.test(ua);
+            const isOpera = /OPR/.test(ua);
+            const isSupported = (isChrome && !isEdge && !isOpera) || isSafari;
+            if (!isSupported) {
+                document.getElementById('browser-lock').classList.remove('hidden');
+                return false;
+            }
+            return true;
         };
-        
-        const finalFirebaseConfig = typeof __firebase_config !== 'undefined' 
-            ? JSON.parse(__firebase_config) 
-            : firebaseConfig;
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-attendance-app';
-
-        // --- Initialize Firebase ---
-        let app, auth, db, currentUserId, currentUserName;
-        let usersCollectionRef; // Reference to 'users' collection
-        try {
-            app = initializeApp(finalFirebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-            // Define the path to the users collection
-            const usersPath = `artifacts/${appId}/public/data/users`;
-            usersCollectionRef = collection(db, usersPath);
-        } catch (e) {
-            console.error("Firebase initialization error:", e);
-            document.getElementById("loading-container").innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Could not connect to Firebase. Check console.</div>`;
-        }
-
-        // --- UI Elements ---
-        const loadingContainer = document.getElementById("loading-container");
-        const registrationContainer = document.getElementById("registration-container");
-        const scannerContainer = document.getElementById("scanner-container");
-        const welcomeMessage = document.getElementById("welcome-message");
-        const userUidDisplay = document.getElementById("user-uid-display");
-        
-        // Registration form fields
-        const studentIdInput = document.getElementById("student-id");
-        const studentNameInput = document.getElementById("student-name");
-        const studentSexInput = document.getElementById("student-sex");
-        const studentTelInput = document.getElementById("student-tel");
-        const studentEmailInput = document.getElementById("student-email");
-        const studentProgramInput = document.getElementById("student-program");
-        const studentAcademicYearInput = document.getElementById("student-academic-year");
-        const studentClassInput = document.getElementById("student-class");
-        
-        const registerBtn = document.getElementById("register-btn");
-        const registerMessage = document.getElementById("register-message");
-
-        const finalMessageDiv = document.getElementById("final-message");
-        const linkContainer = document.getElementById("attendance-link-container");
-
-        // --- Firebase Authentication ---
-        onAuthStateChanged(auth, async (user) => {
-            let authUser = user;
-            if (!authUser) {
-                try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
-                        authUser = userCredential.user;
-                        console.log("User signed in with custom token:", authUser.uid);
-                    } else {
-                        const userCredential = await signInAnonymously(auth);
-                        authUser = userCredential.user;
-                        console.log("New user signed in anonymously:", authUser.uid);
-                    }
-                } catch (error) {
-                    console.error("Authentication error:", error);
-                    loadingContainer.innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Authentication failed. Please refresh.</div>`;
-                    return;
-                }
+        const getDeviceId = () => {
+            let id = localStorage.getItem('kctec_device_id');
+            if (!id) {
+                id = 'DEV-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+                localStorage.setItem('kctec_device_id', id);
             }
+            return id;
+        };
 
-            currentUserId = authUser.uid;
-            console.log("User authenticated:", currentUserId);
+        const handleAuth = () => {
+            const name = document.getElementById('auth-name').value.trim();
+            const id = document.getElementById('auth-id').value.trim();
+            if (!name || !id) { showModal('Required', 'Please enter Name and ID.'); return; }
+            const pinnedId = localStorage.getItem('kctec_pinned_id');
+            if (pinnedId && pinnedId !== id) { showModal('Device Locked', `Device linked to ID: ${pinnedId}.`); return; }
+            if (!pinnedId) localStorage.setItem('kctec_pinned_id', id);
+            currentUser = { name, id, deviceId: getDeviceId() };
+            localStorage.setItem('kctec_checkin_user', JSON.stringify(currentUser));
+            showApp();
+        };
 
-            // --- Original Flow: Proceed to registration check ---
-            await proceedToRegistrationCheck();
-        });
+        const showApp = () => {
+            document.getElementById('auth-section').classList.add('hidden-section');
+            document.getElementById('app-section').classList.remove('hidden-section');
+            const nameEl = document.getElementById('display-user-name');
+            const idEl = document.getElementById('display-user-id');
+            const dateEl = document.getElementById('current-date-display');
+            if (nameEl) nameEl.textContent = currentUser.name;
+            if (idEl) idEl.textContent = currentUser.id;
+            if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            updateUI();
+        };
 
+        const updateUI = () => {
+            const today = getLocalDate();
+            let stateData = JSON.parse(localStorage.getItem('kctec_daily_state') || '{}');
+            if (stateData.date !== today) {
+                stateData = { date: today, history: {} };
+                localStorage.setItem('kctec_daily_state', JSON.stringify(stateData));
+            }
+            const history = stateData.history || {};
+            const sequence = ['AM-IN', 'AM-OUT', 'PM-IN', 'PM-OUT'];
+            let lastCompleted = 'NONE';
+            let completedCount = 0;
 
-        /**
-         * Checks Firestore for user registration.
-         */
-        async function proceedToRegistrationCheck() {
-            // We use the collection ref now
-            const userDocRef = doc(usersCollectionRef, currentUserId);
-            
-            try {
-                const userDoc = await getDoc(userDocRef);
-                loadingContainer.classList.add("hidden"); // Ensure it's hidden
-
-                if (userDoc.exists() && userDoc.data().name) {
-                    // User is registered
-                    currentUserName = userDoc.data().name;
-                    welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
-                    welcomeMessage.classList.remove("hidden");
-                    scannerContainer.classList.remove("hidden");
-                    initializeScanner(); // Start the scanner
+            sequence.forEach(key => {
+                const bar = document.getElementById(`bar-${key}`);
+                const timeEl = document.getElementById(`time-${key}`);
+                const cssKey = key.toLowerCase();
+                if (history[key]) {
+                    bar.className = `progress-segment done color-${cssKey}`;
+                    bar.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M5 13l4 4L19 7"/></svg>`;
+                    timeEl.textContent = history[key];
+                    lastCompleted = key;
+                    completedCount++;
                 } else {
-                    // User is not registered
-                    userUidDisplay.textContent = currentUserId;
-                    registrationContainer.classList.remove("hidden");
+                    bar.className = 'progress-segment progress-bg';
+                    bar.innerHTML = '';
+                    timeEl.textContent = '--:-- --';
                 }
-            } catch (error) {
-                console.error("Error checking user registration:", error);
-                loadingContainer.classList.remove("hidden"); // Show loading container again
-                loadingContainer.innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg">Error: Could not check user status. Please refresh.</div>`;
-            }
-        }
+            });
+            document.getElementById('progress-fraction').textContent = `${completedCount}/4`;
+            const btns = { 'AM-IN': document.getElementById('am-in-btn'), 'AM-OUT': document.getElementById('am-out-btn'), 'PM-IN': document.getElementById('pm-in-btn'), 'PM-OUT': document.getElementById('pm-out-btn') };
+            Object.values(btns).forEach(b => b.disabled = true);
+            if (lastCompleted === 'NONE') btns['AM-IN'].disabled = false;
+            else if (lastCompleted === 'AM-IN') btns['AM-OUT'].disabled = false;
+            else if (lastCompleted === 'AM-OUT') btns['PM-IN'].disabled = false;
+            else if (lastCompleted === 'PM-IN') btns['PM-OUT'].disabled = false;
+            setStatus(completedCount === 4 ? 'Day Complete' : 'Ready to Scan', completedCount === 4 ? 'success' : 'info');
+        };
 
-        // --- Registration Logic ---
-        registerBtn.addEventListener("click", async () => {
-            // Get values from all form fields
-            const studentId = studentIdInput.value.trim();
-            const name = studentNameInput.value.trim();
-            const sex = studentSexInput.value;
-            const telephone = studentTelInput.value.trim();
-            const email = studentEmailInput.value.trim().toLowerCase();
-            const program = studentProgramInput.value.trim();
-            const academicYear = studentAcademicYearInput.value.trim();
-            const studentClass = studentClassInput.value.trim();
+        const saveProgress = (action, labelSuffix = "") => {
+            const today = getLocalDate();
+            let stateData = JSON.parse(localStorage.getItem('kctec_daily_state') || '{}');
+            const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) + labelSuffix;
+            stateData.history[action] = timeStr;
+            stateData.date = today;
+            localStorage.setItem('kctec_daily_state', JSON.stringify(stateData));
+            updateUI(); 
+        };
 
-            // Basic Validation
-            if (!studentId || !name || !sex || !telephone || !email || !program || !academicYear || !studentClass) {
-                registerMessage.textContent = "Please fill out all fields.";
-                registerMessage.className = "text-sm text-center mt-3 text-red-600";
-                return;
-            }
+        const confirmSkip = () => {
+            let activeAction = 'AM-IN';
+            const stateData = JSON.parse(localStorage.getItem('kctec_daily_state') || '{}');
+            const history = stateData.history || {};
+            const sequence = ['AM-IN', 'AM-OUT', 'PM-IN', 'PM-OUT'];
+            for(let key of sequence) { if(!history[key]) { activeAction = key; break; } }
+            if(Object.keys(history).length >= 4) { showModal('Finished', 'All sessions are complete.'); return; }
+            document.getElementById('modal-title').textContent = "Skip " + activeAction.replace('-',' ');
+            document.getElementById('modal-message').textContent = "Record this session as 'SKIPPED'?";
+            document.getElementById('modal-cancel-btn').classList.remove('hidden');
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            confirmBtn.textContent = "Yes, Skip";
+            confirmBtn.onclick = () => performSkip(activeAction);
+            const m = document.getElementById('custom-modal');
+            m.classList.remove('opacity-0', 'pointer-events-none');
+            m.querySelector('div').classList.remove('scale-95');
+        };
 
-            registerBtn.disabled = true;
-            registerBtn.textContent = "Registering...";
-            registerMessage.textContent = "Checking Student ID...";
-            registerMessage.className = "text-sm text-center mt-3 text-blue-600";
+        const performSkip = async (action) => {
+            closeModal();
+            toggleLoading(true);
+            const res = await syncToBackend('log_entry', { staffId: currentUser.id, staffName: currentUser.name, storeId: "SKIPPED", type: action + " (SKIPPED)", dist: 0 });
+            if (res.success) { saveProgress(action, " (S)"); showModal('Skipped', `Session ${action} has been skipped.`); }
+            else { showModal('Sync Error', 'Check connection.'); }
+            toggleLoading(false);
+        };
 
-
+        const syncToBackend = async (action, data) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
             try {
-                // --- NEW: Check for duplicate Student ID ---
-                const q = query(usersCollectionRef, where("studentId", "==", studentId));
-                const querySnapshot = await getDocs(q);
-
-                if (!querySnapshot.empty) {
-                    // A document with this student ID already exists
-                    throw new Error("This Student ID is already registered.");
-                }
-                // --- End duplicate check ---
-
-                registerMessage.textContent = "Registering...";
-                
-                // Save all fields to Firestore, using the Auth UID as the document ID
-                const userDocRef = doc(usersCollectionRef, currentUserId);
-                await setDoc(userDocRef, {
-                    userId: currentUserId, // Store the UID in the doc as well
-                    studentId: studentId,
-                    name: name,
-                    sex: sex,
-                    telephone: telephone,
-                    email: email,
-                    program: program,
-                    academicYear: academicYear,
-                    class: studentClass,
-                    registeredAt: serverTimestamp()
+                const payload = { action, ...data, deviceId: currentUser.deviceId };
+                const response = await fetch(API_URL, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload), 
+                    signal: controller.signal 
                 });
-
-                // Registration successful!
-                currentUserName = name; // Set the name for the welcome message
-                registrationContainer.classList.add("hidden");
-                welcomeMessage.textContent = `Welcome, ${currentUserName}!`;
-                welcomeMessage.classList.remove("hidden");
-                scannerContainer.classList.remove("hidden");
-                initializeScanner(); // Start the scanner
-
-            } catch (error) {
-                console.error("Error saving registration:", error);
-                registerMessage.textContent = `Error: ${error.message}`;
-                registerMessage.className = "text-sm text-center mt-3 text-red-600";
-                registerBtn.disabled = false;
-                registerBtn.textContent = "Register";
+                const result = await response.json();
+                return { success: result.status === 'success', error: result.message };
+            } catch (e) { 
+                return { success: false, error: e.name === 'AbortError' ? 'Timeout' : 'Network' }; 
+            } finally { 
+                clearTimeout(timeoutId); 
             }
-        });
+        };
 
+        const initiateScan = (action) => { currentAction = action; startScan(); };
+        const startScan = () => {
+            if (scanning) return;
+            qrScanner = new Html5Qrcode("reader");
+            qrScanner.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => handleScanSuccess(text))
+            .then(() => {
+                scanning = true;
+                document.getElementById('controls-wrapper').classList.add('hidden-section');
+                document.getElementById('cancel-control').classList.remove('hidden-section');
+            }).catch(() => setStatus('Camera Error', 'error'));
+        };
+        const stopScan = async () => { if (qrScanner && scanning) { await qrScanner.stop(); scanning = false; document.getElementById('controls-wrapper').classList.remove('hidden-section'); document.getElementById('cancel-control').classList.add('hidden-section'); } };
 
-        // --- App State ---
-        let classData = null; // Will hold { name, teacherName, course, lat, lon, radius }
-        let html5QrCode; // Using the core class, not the scanner UI
-
-        // --- 1. QR Code Scanning Logic ---
-        function initializeScanner() {
-            if (html5QrCode) {
-                console.log("Scanner already initialized.");
-                return;
-            }
-
-            // New UI elements
-            const startScanBtn = document.getElementById("start-scan-btn");
-            const stopScanBtn = document.getElementById("stop-scan-btn");
-            const qrReaderDiv = document.getElementById("qr-reader");
-
+        const handleScanSuccess = async (text) => {
+            await stopScan();
+            toggleLoading(true);
             try {
-                html5QrCode = new Html5Qrcode("qr-reader");
-            } catch (err) {
-                console.error("Failed to initialize Html5Qrcode:", err);
-                showMessage("error", "Could not initialize QR scanner.");
-                return;
-            }
+                const parts = text.split('|');
+                if (parts.length < 4) throw new Error('Invalid QR');
+                const qr = { storeId: parts[0], lat: parseFloat(parts[1]), lon: parseFloat(parts[2]), radius: parseInt(parts[3]) };
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    const dist = haversineDistance(pos.coords.latitude, pos.coords.longitude, qr.lat, qr.lon);
+                    if (dist > qr.radius) { toggleLoading(false); showModal('Out of Range', `Dist: ${Math.round(dist)}m. Limit: ${qr.radius}m.`); return; }
+                    const res = await syncToBackend('log_entry', { staffId: currentUser.id, staffName: currentUser.name, storeId: qr.storeId, type: currentAction, dist: Math.round(dist) });
+                    toggleLoading(false);
+                    if (res.success) { saveProgress(currentAction); showModal('Success', `${currentAction} saved.`); }
+                    else { showModal('Sync Error', res.error || 'Try again.'); }
+                }, () => { toggleLoading(false); showModal('GPS Error', 'Enable GPS.'); }, { enableHighAccuracy: true, timeout: 8000 });
+            } catch (err) { toggleLoading(false); showModal('Error', err.message); }
+        };
 
-            // --- "Start Scan" Button Click ---
-            startScanBtn.addEventListener("click", () => {
-                // Check for camera permission *just in time*
-                requestCameraPermission().then(() => {
-                    qrReaderDiv.classList.remove("hidden");
-                    startScanBtn.classList.add("hidden");
-                    stopScanBtn.classList.remove("hidden");
-                    finalMessageDiv.classList.add("hidden"); 
-                    linkContainer.classList.add("hidden"); // Hide previous success message
+        const haversineDistance = (lat1, lon1, lat2, lon2) => {
+            const R = 6371e3;
+            const p1 = lat1 * Math.PI/180, p2 = lat2 * Math.PI/180, dp = (lat2-lat1)*Math.PI/180, dl = (lon2-lon1)*Math.PI/180;
+            const a = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        };
 
-                    const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+        const setStatus = (msg, type) => { const el = document.getElementById('status-message'); if (el) { el.textContent = msg; el.className = `text-sm font-medium ${type === 'error' ? 'text-red-600' : 'text-blue-600'}`; } };
 
-                    Html5Qrcode.getCameras().then(cameras => {
-                        let cameraId;
-                        if (cameras && cameras.length) {
-                            const backCamera = cameras.find(camera => 
-                                (camera.label && camera.label.toLowerCase().includes('back')) || 
-                                (camera.label && camera.label.toLowerCase().includes('environment'))
-                            );
-                            
-                            if (backCamera) {
-                                cameraId = backCamera.id;
-                                console.log("Using back camera:", backCamera.label);
-                            } else {
-                                cameraId = cameras[0].id;
-                                console.log("No back camera found, using default:", cameras[0].label);
-                            }
-                        } else {
-                            console.warn("No cameras enumerated. Using default facingMode.");
-                            cameraId = { facingMode: "environment" };
-                        }
+        const showModal = (title, message) => {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').textContent = message;
+            document.getElementById('modal-input-container').classList.add('hidden');
+            document.getElementById('modal-image-container').classList.add('hidden');
+            document.getElementById('modal-leave-container').classList.add('hidden');
+            document.getElementById('modal-cancel-btn').classList.add('hidden');
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            confirmBtn.textContent = "OK";
+            confirmBtn.onclick = closeModal;
+            const m = document.getElementById('custom-modal');
+            m.classList.remove('opacity-0', 'pointer-events-none');
+            m.querySelector('div').classList.remove('scale-95');
+        };
 
-                        html5QrCode.start(
-                            cameraId,
-                            config,
-                            onScanSuccess, 
-                            onScanError    
-                        ).catch((err) => {
-                            console.error("Camera start error (attempt 1):", err);
-                            // Fallback for devices that don't like specific IDs
-                            html5QrCode.start(
-                                { facingMode: "environment" }, config, onScanSuccess, onScanError
-                            ).catch((fallbackErr) => {
-                                console.error("Fallback camera start error (attempt 2):", fallbackErr);
-                                showMessage("error", "Failed to start camera. Please grant permissions.");
-                                stopScanning(); 
-                            });
-                        });
+        const closeModal = () => {
+            const m = document.getElementById('custom-modal');
+            m.classList.add('opacity-0', 'pointer-events-none');
+            m.querySelector('div').classList.add('scale-95');
+            setTimeout(() => {
+                document.getElementById('modal-input-container').classList.add('hidden');
+                document.getElementById('modal-image-container').classList.add('hidden');
+                document.getElementById('modal-leave-container').classList.add('hidden');
+                document.getElementById('modal-cancel-btn').classList.add('hidden');
+                document.getElementById('modal-message').textContent = "";
+            }, 300);
+        };
 
-                    }).catch(err => {
-                        console.error("Camera access error (getCameras):", err);
-                        // Fallback if getCameras fails
-                        html5QrCode.start(
-                            { facingMode: "environment" }, 
-                            config,
-                            onScanSuccess, 
-                            onScanError    
-                        ).catch((startErr) => {
-                            console.error("Fallback camera start error (attempt 3):", startErr);
-                            showMessage("error", "Failed to start camera. Please grant permissions.");
-                            stopScanning(); 
-                        });
-                    });
-                }).catch(err => {
-                    // Camera permission was denied by the user
-                    showMessage("error", err.message);
-                });
-            });
+        const viewQR = () => {
+            document.getElementById('modal-title').textContent = "Check-In QR";
+            document.getElementById('modal-message').textContent = "";
+            document.getElementById('modal-image-container').classList.remove('hidden');
+            document.getElementById('modal-cancel-btn').classList.add('hidden');
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            confirmBtn.textContent = "Close";
+            confirmBtn.onclick = closeModal;
+            const m = document.getElementById('custom-modal');
+            m.classList.remove('opacity-0', 'pointer-events-none');
+            m.querySelector('div').classList.remove('scale-95');
+        };
 
-            // --- "Stop Scan" Button Click ---
-            stopScanBtn.addEventListener("click", () => {
-                stopScanning();
-            });
-        }
-
-        /**
-         * Wraps Camera request in a Promise. (Used for JIT permission)
-         */
-        async function requestCameraPermission() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error("Camera access (getUserMedia) is not supported by your browser.");
-            }
-            try {
-                // Request video stream
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                // Stop all tracks immediately, we only needed the permission.
-                stream.getTracks().forEach(track => track.stop());
-                return; // Success
-            } catch (err) {
-                console.error("getUserMedia error:", err);
-                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                    throw new Error("Camera access denied. Please enable it in your browser settings to continue.");
-                }
-                throw new Error("Could not access camera. Please try again.");
-            }
-        }
-
-        /**
-         * Stops the camera scan and resets the UI buttons.
-         */
-        function stopScanning() {
-            try {
-                if (html5QrCode && html5QrCode.isScanning) {
-                    html5QrCode.stop().then(() => {
-                        console.log("Camera stopped.");
-                    }).catch(err => {
-                        console.warn("Camera stop failed, already stopped?", err);
-                    });
-                }
-            } catch (err) {
-                console.warn("Error stopping scanner:", err);
-            }
+        const openLeaveModal = () => {
+            document.getElementById('modal-title').textContent = "Leave Request";
+            document.getElementById('modal-message').textContent = "";
+            document.getElementById('modal-leave-container').classList.remove('hidden');
+            document.getElementById('modal-cancel-btn').classList.remove('hidden');
             
-            // Reset UI
-            document.getElementById("qr-reader").classList.add("hidden");
-            document.getElementById("start-scan-btn").classList.remove("hidden");
-            document.getElementById("stop-scan-btn").classList.add("hidden");
-        }
+            const todayStr = new Date().toISOString().split('T')[0];
+            document.getElementById('leave-start-date').value = todayStr;
+            document.getElementById('leave-end-date').value = todayStr;
 
-        // *** MODIFIED FUNCTION ***
-        function onScanSuccess(decodedText, decodedResult) {
-            stopScanning();
-            console.log(`Scan result: ${decodedText}`);
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            confirmBtn.textContent = "Submit Request";
+            confirmBtn.onclick = submitLeaveRequest;
 
-            try {
-                // Parse the new data: "Class|Teacher_Name|Course|11.551464|104.928236|50"
-                const parts = decodedText.split('|');
-                if (parts.length !== 6) throw new Error("Invalid QR code format. Expected 6 parts.");
+            const m = document.getElementById('custom-modal');
+            m.classList.remove('opacity-0', 'pointer-events-none');
+            m.querySelector('div').classList.remove('scale-95');
+        };
 
-                classData = {
-                    name: parts[0],
-                    teacherName: parts[1],
-                    course: parts[2], // <-- Added new field
-                    lat: parseFloat(parts[3]), 
-                    lon: parseFloat(parts[4]), 
-                    radius: parseFloat(parts[5])
-                };
+        const submitLeaveRequest = async () => {
+            const type = document.getElementById('leave-type').value;
+            const start = document.getElementById('leave-start-date').value;
+            const end = document.getElementById('leave-end-date').value;
+            const reason = document.getElementById('leave-reason').value;
 
-                if (isNaN(classData.lat) || isNaN(classData.lon) || isNaN(classData.radius)) {
-                    throw new Error("Invalid location data in QR code.");
-                }
+            if (!reason) { document.getElementById('leave-reason').focus(); return; }
 
-                finalMessageDiv.classList.add("hidden");
-                
-                // Call the time check function
-                checkLastScanTimeAndProceed();
+            closeModal();
+            toggleLoading(true);
+            const res = await syncToBackend('leave_request', { staffId: currentUser.id, staffName: currentUser.name, type, start, end, reason });
+            toggleLoading(false);
+            if (res.success) { showModal('Success', 'Leave request submitted.'); }
+            else { showModal('Error', 'Failed to submit. Check connection.'); }
+        };
 
-            } catch (error) {
-                console.error("QR Parse Error:", error);
-                finalMessageDiv.innerHTML = `<div class="text-red-600 font-medium p-3 bg-red-100 rounded-lg"><strong>Scan Failed:</strong> ${error.message}. Please scan a valid class QR code.</div>`;
-                finalMessageDiv.classList.remove("hidden");
-            }
-        }
+        const toggleLoading = (show) => document.getElementById('loading-spinner').classList.toggle('hidden', !show);
 
-        function onScanError(errorMessage) {
-            // This callback is mostly for live scanning, not file uploads.
-            // We can safely ignore it to avoid spamming the console.
-        }
+        const requestReset = () => {
+            document.getElementById('modal-title').textContent = "Admin Reset";
+            document.getElementById('modal-message').textContent = "Enter PIN:";
+            document.getElementById('modal-input-container').classList.remove('hidden');
+            document.getElementById('modal-cancel-btn').classList.remove('hidden');
+            document.getElementById('modal-input').value = "";
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            confirmBtn.textContent = "Reset";
+            confirmBtn.onclick = () => { if (document.getElementById('modal-input').value === ADMIN_RESET_PIN) { localStorage.clear(); window.location.reload(); } else { showModal('Error', 'Wrong PIN'); } };
+            const m = document.getElementById('custom-modal');
+            m.classList.remove('opacity-0', 'pointer-events-none');
+        };
 
-        // --- 2. New Time Check Logic ---
-
-        /**
-         * New function: Checks Firestore for the last successful scan before checking location.
-         */
-        async function checkLastScanTimeAndProceed() {
-            if (!classData || !currentUserId) {
-                console.error("Missing class data or user ID for scan check.");
-                return;
-            }
-
-            showMessage("info", "Scan successful. Checking your last attendance time...");
-
-            try {
-                const attemptsPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts`;
-                const attemptsRef = collection(db, attemptsPath);
-                
-                // Query for all *successful* attempts for this user and class
-                // We must sort in memory as per instructions (no orderBy in query)
-                const q = query(attemptsRef, where("isSuccess", "==", true));
-                const querySnapshot = await getDocs(q);
-
-                let lastSuccessfulScanTime = null;
-
-                if (!querySnapshot.empty) {
-                    // Sort the results in memory to find the most recent
-                    const successfulAttempts = querySnapshot.docs
-                        .map(d => d.data())
-                        .filter(d => d.timestamp); // Ensure timestamp exists
-
-                    if (successfulAttempts.length > 0) {
-                        successfulAttempts.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-                        lastSuccessfulScanTime = successfulAttempts[0].timestamp;
-                    }
-                }
-
-                if (lastSuccessfulScanTime) {
-                    const now = Timestamp.now();
-                    const oneHourInMilliseconds = 60 * 60 * 1000;
-                    const timeDifference = now.toMillis() - lastSuccessfulScanTime.toMillis();
-
-                    if (timeDifference < oneHourInMilliseconds) {
-                        // User scanned too recently
-                        const minutesRemaining = Math.ceil((oneHourInMilliseconds - timeDifference) / 60000);
-                        showMessage("error", `You have already checked in for this class. Please try again in ${minutesRemaining} minutes.`);
-                        return; // Stop the process
-                    }
-                }
-
-                // If we get here, it means:
-                // 1. They've never scanned before.
-                // 2. Their last scan was more than 1 hour ago.
-                // So, we proceed to the location check.
-                console.log("Time check passed. Proceeding to location check.");
-                checkLocationAndMarkAttendance();
-
-            } catch (error) {
-                console.error("Error checking last scan time:", error);
-                showMessage("error", "Could not verify your last attendance. Please try again.");
-            }
-        }
-
-
-        // --- 3. Location Check Logic ---
-        function checkLocationAndMarkAttendance() {
-            if (!classData) return;
-            
-            showMessage("info", "Checking your location...");
-
-            // Request location permission *just in time*
-            requestLocationPermission().then(position => {
-                // Location Success
-                const userLat = position.coords.latitude;
-                const userLon = position.coords.longitude;
-                const userAccuracy = position.coords.accuracy;
-
-                console.log(`User Location: ${userLat}, ${userLon} (Accuracy: ${userAccuracy}m)`);
-                
-                const distance = haversineDistance(
-                    classData.lat, classData.lon,
-                    userLat, userLon
-                );
-
-                console.log(`Distance to class: ${distance.toFixed(2)} meters`);
-                
-                if (distance <= classData.radius) {
-                    // USER IS IN RANGE
-                    showMessage("success", `Success! You are ${distance.toFixed(0)}m from class (within the ${classData.radius}m range).`);
-                    linkContainer.classList.remove("hidden"); // Show the new success message
-                    logAttendanceAttempt(true, distance, userLat, userLon);
-                } else {
-                    // USER IS OUT OF RANGE
-                    showMessage("error", `Access Denied. You are ${distance.toFixed(0)}m from class. You must be within ${classData.radius}m.`);
-                    linkContainer.classList.add("hidden");
-                    logAttendanceAttempt(false, distance, userLat, userLon);
-                }
-            }).catch(error => {
-                // Location Error
-                showMessage("error", error.message);
-            });
-        }
-
-        /**
-         * Wraps Geolocation request in a Promise. (Used for JIT permission)
-         */
-        function requestLocationPermission() {
-            return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    reject(new Error("Geolocation is not supported by your browser."));
-                    return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                    (position) => { resolve(position); }, // Success
-                    (error) => { // Error
-                        let msg = "Could not get location. ";
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                msg = "Location access denied. Please enable it in your browser settings to continue.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                msg = "Location information is unavailable. Please try again.";
-                                break;
-                            case error.TIMEOUT:
-                                msg = "The request to get location timed out. Please try again.";
-                                break;
-                            default:
-                                msg = "An unknown location error occurred. Please try again.";
-                                break;
-                        }
-                        reject(new Error(msg));
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
-            });
-        }
-
-        // --- 4. Firebase Logging ---
-        // *** MODIFIED FUNCTION ***
-        async function logAttendanceAttempt(isSuccess, distance, userLat, userLon) {
-            // --- NEW: Check for success before logging ---
-            if (!isSuccess) {
-                console.log("Attempt was not successful. Skipping log.");
-                return;
-            }
-            // --- END NEW CHECK ---
-
-            if (!currentUserId || !classData) {
-                console.warn("Missing user ID or class data. Skipping log.");
-                return;
-            }
-
-            // Create the data object
-            const logData = {
-                userId: currentUserId,
-                userName: currentUserName || "Not Registered",
-                class: classData.name,
-                teacher: classData.teacherName, 
-                course: classData.course, // <-- ADDED THIS LINE
-                timestamp: serverTimestamp(),
-                isSuccess: isSuccess,
-                reportedDistance: distance,
-                reportedLat: userLat,
-                reportedLon: userLon,
-                userAgent: navigator.userAgent
-            };
-
-            try {
-                // --- Log 1: Individual student log (for 1-hour check) ---
-                const attemptId = `attempt_${Date.now()}`;
-                const logPath = `artifacts/${appId}/public/data/attendance_logs/${classData.name}/students/${currentUserId}/attempts/${attemptId}`;
-                const logRef = doc(db, logPath);
-                await setDoc(logRef, logData);
-                console.log("Individual attendance attempt logged.");
-
-                // --- Log 2: Master log (for reporting) ---
-                const masterLogRef = collection(db, `artifacts/${appId}/public/data/master_log`);
-                await addDoc(masterLogRef, logData);
-                console.log("Master attendance attempt logged.");
-
-            } catch (error) {
-                console.error("Firestore logging error:", error);
-                // Show error to user
-                showMessage("error", "Error: Could not save attendance. Check console.");
-            }
-        }
-
-        // --- Helper Functions ---
-
-        /**
-         * Calculates the distance between two points in meters using the Haversine formula.
-         */
-        function haversineDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // Earth's radius in meters
-            const phi1 = lat1 * Math.PI / 180;
-            const phi2 = lat2 * Math.PI / 180;
-            const deltaPhi = (lat2 - lat1) * Math.PI / 180;
-            const deltaLambda = (lon2 - lon1) * Math.PI / 180;
-
-            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-                      Math.cos(phi1) * Math.cos(phi2) *
-                      Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
-            
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            
-            return R * c; // Distance in meters
-        }
-
-        /**
-         * Displays a message to the user.
-         * @param {'success' | 'error' | 'info'} type
-         * @param {string} message
-         */
-        function showMessage(type, message) {
-            let bgColor = "bg-gray-100";
-            let textColor = "text-gray-800";
-
-            if (type === "success") {
-                bgColor = "bg-green-100";
-                textColor = "text-green-800";
-            } else if (type === "error") {
-                bgColor = "bg-red-100";
-                textColor = "text-red-800";
-            } else if (type === "info") {
-                bgColor = "bg-blue-100";
-                textColor = "text-blue-800";
-            }
-
-            finalMessageDiv.innerHTML = `<div class="${textColor} ${bgColor} font-medium p-3 rounded-lg">${message}</div>`;
-            finalMessageDiv.classList.remove("hidden");
-        }
-
+        window.onload = () => { if (!checkBrowser()) return; const saved = localStorage.getItem('kctec_checkin_user'); if (saved) { currentUser = JSON.parse(saved); showApp(); } };
     </script>
 </body>
 </html>
